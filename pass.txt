@@ -1,0 +1,5 @@
+ Project URL: https://wmrnlijtsstroetiwiae.supabase.co
+
+ API Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtcm5saWp0c3N0cm9ldGl3aWFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNjI5MzcsImV4cCI6MjA4MDYzODkzN30.aChuvjqzxewHZgnGl15as64-v_uWL0VAgc1e6DeXiPc
+
+Database URL: postgresql://postgres.wmrnlijtsstroetiwiae:[jtk6br5x2vz0]@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
