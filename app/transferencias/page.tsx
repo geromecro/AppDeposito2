@@ -24,6 +24,12 @@ export default function TransferenciasPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
+  // Estados para editar/eliminar
+  const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
+  const [editForm, setEditForm] = useState({ codigo: '', descripcion: '', cantidad: 1 });
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
     if (!storedVendedor) {
@@ -58,6 +64,73 @@ export default function TransferenciasPage() {
   const handleLogout = () => {
     localStorage.removeItem('vendedor');
     router.push('/');
+  };
+
+  // Abrir modal de edición
+  const handleEdit = (id: number) => {
+    const product = productos.find((p) => p.id === id);
+    if (product) {
+      setEditingProduct(product);
+      setEditForm({
+        codigo: product.codigo,
+        descripcion: product.descripcion,
+        cantidad: product.cantidad,
+      });
+    }
+  };
+
+  // Guardar edición
+  const handleSaveEdit = async () => {
+    if (!editingProduct) return;
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/productos/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!res.ok) throw new Error('Error al guardar');
+
+      setEditingProduct(null);
+      fetchProductos();
+    } catch (error) {
+      console.error('Error saving:', error);
+      alert('Error al guardar los cambios');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Abrir modal de eliminación
+  const handleDelete = (id: number) => {
+    const product = productos.find((p) => p.id === id);
+    if (product) {
+      setDeletingProduct(product);
+    }
+  };
+
+  // Confirmar eliminación
+  const handleConfirmDelete = async () => {
+    if (!deletingProduct) return;
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/productos/${deletingProduct.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Error al eliminar');
+
+      setDeletingProduct(null);
+      fetchProductos();
+    } catch (error) {
+      console.error('Error deleting:', error);
+      alert('Error al eliminar el producto');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!vendedor) {
@@ -108,12 +181,15 @@ export default function TransferenciasPage() {
           productos.map((producto) => (
             <ProductoCard
               key={producto.id}
+              id={producto.id}
               codigo={producto.codigo}
               descripcion={producto.descripcion}
               cantidad={producto.cantidad}
               vendedor={producto.vendedor}
               fotoUrl={producto.fotoUrl}
               createdAt={producto.createdAt}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
           ))
         )}
@@ -139,6 +215,94 @@ export default function TransferenciasPage() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </Link>
+
+      {/* Modal de edición */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md">
+            <div className="p-4 border-b border-primary-200">
+              <h2 className="text-lg font-semibold text-primary-900">Editar producto</h2>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Código</label>
+                <input
+                  type="text"
+                  value={editForm.codigo}
+                  onChange={(e) => setEditForm({ ...editForm, codigo: e.target.value })}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Descripción</label>
+                <input
+                  type="text"
+                  value={editForm.descripcion}
+                  onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Cantidad</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editForm.cantidad}
+                  onChange={(e) => setEditForm({ ...editForm, cantidad: parseInt(e.target.value) || 1 })}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-primary-200 flex gap-3">
+              <button
+                onClick={() => setEditingProduct(null)}
+                className="flex-1 px-4 py-2 border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50"
+                disabled={isSaving}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-4 py-2 bg-primary-800 text-white rounded-lg hover:bg-primary-900 disabled:opacity-50"
+                disabled={isSaving}
+              >
+                {isSaving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {deletingProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-sm">
+            <div className="p-4">
+              <h2 className="text-lg font-semibold text-primary-900 mb-2">Eliminar producto</h2>
+              <p className="text-primary-600">
+                ¿Estás seguro que deseas eliminar <strong>{deletingProduct.codigo}</strong>?
+              </p>
+              <p className="text-sm text-primary-500 mt-1">Esta acción no se puede deshacer.</p>
+            </div>
+            <div className="p-4 border-t border-primary-200 flex gap-3">
+              <button
+                onClick={() => setDeletingProduct(null)}
+                className="flex-1 px-4 py-2 border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50"
+                disabled={isSaving}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-2 bg-error-600 text-white rounded-lg hover:bg-error-700 disabled:opacity-50"
+                disabled={isSaving}
+              >
+                {isSaving ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
