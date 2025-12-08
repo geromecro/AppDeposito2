@@ -28,6 +28,15 @@ export default function ResumenPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(formatDateForInput(new Date()));
 
+  // Estados para exportación
+  const [fechaDesde, setFechaDesde] = useState(() => {
+    const hace30Dias = new Date();
+    hace30Dias.setDate(hace30Dias.getDate() - 30);
+    return formatDateForInput(hace30Dias);
+  });
+  const [fechaHasta, setFechaHasta] = useState(formatDateForInput(new Date()));
+  const [isExporting, setIsExporting] = useState(false);
+
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
     if (!storedVendedor) {
@@ -47,6 +56,29 @@ export default function ResumenPage() {
       console.error('Error fetching stats:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetch(`/api/export?desde=${fechaDesde}&hasta=${fechaHasta}`);
+      if (!res.ok) throw new Error('Error al exportar');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `productos_${fechaDesde}_${fechaHasta}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting:', error);
+      alert('Error al exportar los datos');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -140,6 +172,46 @@ export default function ResumenPage() {
                 No hay datos de vendedores
               </p>
             )}
+          </CardBody>
+        </Card>
+
+        {/* Exportar */}
+        <Card>
+          <CardHeader>
+            <h2 className="font-semibold text-primary-900">Exportar a CSV</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-primary-600 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                  max={fechaHasta}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg text-primary-900 bg-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-primary-600 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                  min={fechaDesde}
+                  max={formatDateForInput(new Date())}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg text-primary-900 bg-white text-sm"
+                />
+              </div>
+            </div>
+            <Button
+              onClick={handleExport}
+              variant="primary"
+              className="w-full"
+              disabled={isExporting}
+            >
+              {isExporting ? 'Exportando...' : 'Descargar CSV'}
+            </Button>
           </CardBody>
         </Card>
 
