@@ -9,7 +9,7 @@ import { Card, CardBody, CardHeader } from '@/components/Card';
 interface Stats {
   totalProductos: number;
   totalUnidades: number;
-  productosHoy: number;
+  productosDia: number;
   porVendedor: {
     vendedor: string;
     registros: number;
@@ -17,10 +17,16 @@ interface Stats {
   }[];
 }
 
+// Formato YYYY-MM-DD para input date
+const formatDateForInput = (date: Date) => {
+  return date.toISOString().split('T')[0];
+};
+
 export default function ResumenPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(formatDateForInput(new Date()));
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -28,13 +34,13 @@ export default function ResumenPage() {
       router.push('/');
       return;
     }
-    fetchStats();
-  }, [router]);
+    fetchStats(fechaSeleccionada);
+  }, [router, fechaSeleccionada]);
 
-  const fetchStats = async () => {
+  const fetchStats = async (fecha: string) => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/stats');
+      const res = await fetch(`/api/stats?fecha=${fecha}`);
       const data = await res.json();
       setStats(data);
     } catch (error) {
@@ -64,6 +70,16 @@ export default function ResumenPage() {
           </Link>
           <h1 className="text-lg font-bold text-primary-900">Resumen</h1>
         </div>
+        {/* Selector de fecha */}
+        <div className="px-4 pb-3">
+          <input
+            type="date"
+            value={fechaSeleccionada}
+            onChange={(e) => setFechaSeleccionada(e.target.value)}
+            max={formatDateForInput(new Date())}
+            className="w-full px-3 py-2 border border-primary-300 rounded-lg text-primary-900 bg-white"
+          />
+        </div>
       </header>
 
       <div className="p-4 space-y-4">
@@ -90,9 +106,9 @@ export default function ResumenPage() {
           <Card className="col-span-2">
             <CardBody className="text-center">
               <p className="text-3xl font-bold text-accent-600">
-                {stats?.productosHoy || 0}
+                {stats?.productosDia || 0}
               </p>
-              <p className="text-sm text-primary-500">Registros hoy</p>
+              <p className="text-sm text-primary-500">Registros del día</p>
             </CardBody>
           </Card>
         </div>
@@ -100,7 +116,7 @@ export default function ResumenPage() {
         {/* Por vendedor */}
         <Card>
           <CardHeader>
-            <h2 className="font-semibold text-primary-900">Por Vendedor</h2>
+            <h2 className="font-semibold text-primary-900">Por Vendedor (del día)</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {stats?.porVendedor && stats.porVendedor.length > 0 ? (
@@ -128,7 +144,7 @@ export default function ResumenPage() {
         </Card>
 
         {/* Boton actualizar */}
-        <Button onClick={fetchStats} variant="secondary" className="w-full">
+        <Button onClick={() => fetchStats(fechaSeleccionada)} variant="secondary" className="w-full">
           Actualizar datos
         </Button>
       </div>
