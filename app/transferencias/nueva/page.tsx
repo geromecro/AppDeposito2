@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import imageCompression from 'browser-image-compression';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card, CardBody } from '@/components/Card';
@@ -20,6 +21,7 @@ export default function NuevaTransferenciaPage() {
   const [cantidad, setCantidad] = useState('1');
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -34,18 +36,30 @@ export default function NuevaTransferenciaPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Mostrar preview
+    // Mostrar preview inmediatamente con el archivo original
     const reader = new FileReader();
     reader.onload = (e) => {
       setFotoPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Subir a Supabase
     setIsUploading(true);
+    setUploadStatus('Comprimiendo...');
     try {
+      // Comprimir imagen antes de subir
+      const compressionOptions = {
+        maxSizeMB: 0.3,           // Maximo 300KB
+        maxWidthOrHeight: 1200,   // Maximo 1200px de ancho o alto
+        useWebWorker: true,       // Usar Web Worker para no bloquear UI
+        fileType: 'image/jpeg',   // Convertir a JPEG
+      };
+
+      const compressedFile = await imageCompression(file, compressionOptions);
+      setUploadStatus('Subiendo...');
+
+      // Subir archivo comprimido a Supabase
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('vendedor', vendedor || 'anon');
 
       const res = await fetch('/api/upload', {
@@ -65,6 +79,7 @@ export default function NuevaTransferenciaPage() {
       setFotoPreview(null);
     } finally {
       setIsUploading(false);
+      setUploadStatus('');
     }
   };
 
@@ -146,7 +161,7 @@ export default function NuevaTransferenciaPage() {
                 />
                 {isUploading && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                    <span className="text-white">Subiendo...</span>
+                    <span className="text-white">{uploadStatus || 'Procesando...'}</span>
                   </div>
                 )}
                 <button

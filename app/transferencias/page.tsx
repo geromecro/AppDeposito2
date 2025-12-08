@@ -24,7 +24,8 @@ export default function TransferenciasPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
-  // Estados para editar/eliminar
+  // Estados para ver/editar/eliminar
+  const [viewingProduct, setViewingProduct] = useState<Producto | null>(null);
   const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
   const [editForm, setEditForm] = useState({ codigo: '', descripcion: '', cantidad: 1 });
@@ -64,6 +65,12 @@ export default function TransferenciasPage() {
   const handleLogout = () => {
     localStorage.removeItem('vendedor');
     router.push('/');
+  };
+
+  // Abrir modal de detalle
+  const handleView = (id: number) => {
+    const product = productos.find((p) => p.id === id);
+    if (product) setViewingProduct(product);
   };
 
   // Abrir modal de edición
@@ -188,6 +195,7 @@ export default function TransferenciasPage() {
               vendedor={producto.vendedor}
               fotoUrl={producto.fotoUrl}
               createdAt={producto.createdAt}
+              onView={handleView}
               onEdit={handleEdit}
               onDelete={handleDelete}
             />
@@ -298,6 +306,69 @@ export default function TransferenciasPage() {
                 disabled={isSaving}
               >
                 {isSaving ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de detalle de producto */}
+      {viewingProduct && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setViewingProduct(null)}
+        >
+          <div
+            className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Foto */}
+            {viewingProduct.fotoUrl ? (
+              <img
+                src={viewingProduct.fotoUrl}
+                alt={viewingProduct.descripcion}
+                className="w-full h-64 object-cover"
+              />
+            ) : (
+              <div className="w-full h-40 bg-primary-100 flex items-center justify-center">
+                <svg className="w-16 h-16 text-primary-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <h2 className="text-xl font-bold text-primary-900">{viewingProduct.codigo}</h2>
+                <span className="bg-primary-100 text-primary-800 text-sm font-medium px-3 py-1 rounded">
+                  x{viewingProduct.cantidad}
+                </span>
+              </div>
+
+              <p className="text-primary-700 mb-4">{viewingProduct.descripcion}</p>
+
+              <div className="flex items-center justify-between text-sm text-primary-500 border-t border-primary-100 pt-3">
+                <span>{viewingProduct.vendedor}</span>
+                <span>
+                  {new Date(viewingProduct.createdAt).toLocaleDateString('es-AR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            </div>
+
+            {/* Botón cerrar */}
+            <div className="p-4 border-t border-primary-200">
+              <button
+                onClick={() => setViewingProduct(null)}
+                className="w-full px-4 py-2 bg-primary-800 text-white rounded-lg hover:bg-primary-900"
+              >
+                Cerrar
               </button>
             </div>
           </div>

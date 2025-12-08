@@ -10,6 +10,7 @@ interface ProductoCardProps {
   vendedor: string;
   fotoUrl?: string | null;
   createdAt: string;
+  onView?: (id: number) => void;
   onEdit?: (id: number) => void;
   onDelete?: (id: number) => void;
 }
@@ -22,6 +23,7 @@ export function ProductoCard({
   vendedor,
   fotoUrl,
   createdAt,
+  onView,
   onEdit,
   onDelete,
 }: ProductoCardProps) {
@@ -35,7 +37,10 @@ export function ProductoCard({
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex">
+      <div
+        className={`flex ${onView ? 'cursor-pointer' : ''}`}
+        onClick={() => onView?.(id)}
+      >
         {/* Foto o placeholder */}
         <div className="w-24 h-24 flex-shrink-0 bg-primary-100 flex items-center justify-center">
           {fotoUrl ? (
@@ -81,7 +86,7 @@ export function ProductoCard({
             <div className="flex gap-2 mt-2 pt-2 border-t border-primary-100">
               {onEdit && (
                 <button
-                  onClick={() => onEdit(id)}
+                  onClick={(e) => { e.stopPropagation(); onEdit(id); }}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 text-sm text-primary-600 hover:bg-primary-50 rounded transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +97,7 @@ export function ProductoCard({
               )}
               {onDelete && (
                 <button
-                  onClick={() => onDelete(id)}
+                  onClick={(e) => { e.stopPropagation(); onDelete(id); }}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 text-sm text-error-600 hover:bg-error-50 rounded transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
