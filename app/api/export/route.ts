@@ -32,27 +32,29 @@ export async function GET(request: NextRequest) {
     });
 
     // Generar CSV
-    const headers = ['Codigo', 'Descripcion', 'Cantidad', 'Vendedor', 'Fecha'];
-    const rows = productos.map((p) => [
-      `"${p.codigo.replace(/"/g, '""')}"`,
-      `"${p.descripcion.replace(/"/g, '""')}"`,
-      p.cantidad.toString(),
-      `"${p.vendedor.replace(/"/g, '""')}"`,
-      new Date(p.createdAt).toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    ]);
+    const headers = ['Codigo', 'Descripcion', 'Cantidad', 'Vendedor', 'Fecha', 'Hora'];
+    const rows = productos.map((p) => {
+      const fecha = new Date(p.createdAt);
+      return [
+        `"${p.codigo.replace(/"/g, '""')}"`,
+        `"${p.descripcion.replace(/"/g, '""')}"`,
+        p.cantidad.toString(),
+        `"${p.vendedor.replace(/"/g, '""')}"`,
+        `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`,
+        `${fecha.getHours().toString().padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`,
+      ];
+    });
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+
+    // Agregar BOM para que Excel reconozca UTF-8
+    const BOM = '\uFEFF';
+    const csvWithBOM = BOM + csv;
 
     // Nombre del archivo con rango de fechas
     const filename = `productos_${desde}_${hasta}.csv`;
 
-    return new NextResponse(csv, {
+    return new NextResponse(csvWithBOM, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}"`,
