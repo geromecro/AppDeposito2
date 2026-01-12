@@ -7,13 +7,70 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Producto {
+// Modelo legacy - se mantiene temporalmente para migración
+model ProductoLegacy {
   id          Int       @id @default(autoincrement())
   codigo      String
   descripcion String
   cantidad    Int       @default(1)
   fotoUrl     String?
   vendedor    String
+  ubicacion   String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@map("Producto")
+}
+
+// Nuevo modelo: Catálogo de productos (código único)
+model Producto {
+  id          Int          @id @default(autoincrement())
+  codigo      String       @unique
+  descripcion String
+  fotoUrl     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  movimientos Movimiento[]
+  stocks      Stock[]
+
+  @@map("ProductoCatalogo")
+}
+
+enum TipoMovimiento {
+  ENTRADA
+  TRASLADO
+  SALIDA
+}
+
+model Movimiento {
+  id               Int            @id @default(autoincrement())
+  tipo             TipoMovimiento
+  cantidad         Int
+  ubicacionOrigen  String?
+  ubicacionDestino String?
+  vendedor         String
+  nota             String?
+  fotoUrl          String?
+  createdAt        DateTime       @default(now())
+
+  productoId       Int
+  producto         Producto       @relation(fields: [productoId], references: [id])
+
+  @@index([productoId])
+  @@index([createdAt])
+  @@index([tipo])
+}
+
+model Stock {
+  id         Int      @id @default(autoincrement())
+  cantidad   Int      @default(0)
+  ubicacion  String
+  updatedAt  DateTime @updatedAt
+
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([productoId, ubicacion])
+  @@index([ubicacion])
 }

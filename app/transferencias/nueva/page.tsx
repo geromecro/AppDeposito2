@@ -7,6 +7,7 @@ import imageCompression from 'browser-image-compression';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card, CardBody } from '@/components/Card';
+import { UBICACIONES } from '@/lib/constants';
 
 export default function NuevaTransferenciaPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function NuevaTransferenciaPage() {
   const [codigo, setCodigo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cantidad, setCantidad] = useState('1');
+  const [ubicacion, setUbicacion] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
@@ -91,6 +93,11 @@ export default function NuevaTransferenciaPage() {
       return;
     }
 
+    if (!ubicacion) {
+      alert('Selecciona una ubicacion');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/productos', {
@@ -102,6 +109,7 @@ export default function NuevaTransferenciaPage() {
           cantidad: parseInt(cantidad) || 1,
           fotoUrl,
           vendedor,
+          ubicacion,
         }),
       });
 
@@ -197,6 +205,26 @@ export default function NuevaTransferenciaPage() {
         {/* Datos del producto */}
         <Card>
           <CardBody className="space-y-4">
+            {/* Ubicacion */}
+            <div>
+              <label className="block text-sm font-medium text-primary-700 mb-1">
+                Ubicacion *
+              </label>
+              <select
+                value={ubicacion}
+                onChange={(e) => setUbicacion(e.target.value)}
+                className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                required
+              >
+                <option value="">Seleccionar ubicacion...</option>
+                {UBICACIONES.map((ubi) => (
+                  <option key={ubi} value={ubi}>
+                    {ubi}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <Input
               label="Codigo *"
               value={codigo}

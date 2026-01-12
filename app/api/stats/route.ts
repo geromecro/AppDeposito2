@@ -12,23 +12,23 @@ export async function GET(request: NextRequest) {
     const fechaFin = new Date(fechaInicio);
     fechaFin.setHours(23, 59, 59, 999);
 
-    // Total de productos (sin filtro de fecha)
-    const totalProductos = await prisma.producto.count();
+    // Total de productos (sin filtro de fecha) - modelo legacy
+    const totalProductos = await prisma.productoLegacy.count();
 
-    // Suma total de cantidades (sin filtro de fecha)
-    const sumaCantidades = await prisma.producto.aggregate({
+    // Suma total de cantidades (sin filtro de fecha) - modelo legacy
+    const sumaCantidades = await prisma.productoLegacy.aggregate({
       _sum: { cantidad: true },
     });
 
-    // Productos del día seleccionado
-    const productosDia = await prisma.producto.count({
+    // Productos del día seleccionado - modelo legacy
+    const productosDia = await prisma.productoLegacy.count({
       where: {
         createdAt: { gte: fechaInicio, lte: fechaFin },
       },
     });
 
-    // Productos por vendedor del día seleccionado
-    const porVendedor = await prisma.producto.groupBy({
+    // Productos por vendedor del día seleccionado - modelo legacy
+    const porVendedor = await prisma.productoLegacy.groupBy({
       by: ['vendedor'],
       where: {
         createdAt: { gte: fechaInicio, lte: fechaFin },
@@ -39,12 +39,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       totalProductos,
-      totalUnidades: sumaCantidades._sum.cantidad || 0,
+      totalUnidades: sumaCantidades._sum?.cantidad || 0,
       productosDia,
       porVendedor: porVendedor.map((v) => ({
         vendedor: v.vendedor,
-        registros: v._count.id,
-        unidades: v._sum.cantidad || 0,
+        registros: v._count?.id || 0,
+        unidades: v._sum?.cantidad || 0,
       })),
     });
   } catch (error) {

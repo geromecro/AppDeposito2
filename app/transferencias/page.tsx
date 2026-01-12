@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { SearchBar } from '@/components/SearchBar';
 import { ProductoCard } from '@/components/ProductoCard';
+import { UBICACIONES } from '@/lib/constants';
 
 interface Producto {
   id: number;
@@ -14,6 +15,7 @@ interface Producto {
   cantidad: number;
   fotoUrl: string | null;
   vendedor: string;
+  ubicacion: string | null;
   createdAt: string;
 }
 
@@ -21,6 +23,8 @@ export default function TransferenciasPage() {
   const router = useRouter();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filtroUbicacion, setFiltroUbicacion] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
@@ -28,8 +32,9 @@ export default function TransferenciasPage() {
   const [viewingProduct, setViewingProduct] = useState<Producto | null>(null);
   const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Producto | null>(null);
-  const [editForm, setEditForm] = useState({ codigo: '', descripcion: '', cantidad: 1 });
+  const [editForm, setEditForm] = useState({ codigo: '', descripcion: '', cantidad: 1, ubicacion: '' });
   const [isSaving, setIsSaving] = useState(false);
+  const [imageFullscreen, setImageFullscreen] = useState<string | null>(null);
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -40,11 +45,20 @@ export default function TransferenciasPage() {
     setVendedor(storedVendedor);
   }, [router]);
 
+  // Debounce para la búsqueda (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const fetchProductos = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (filtroUbicacion) params.set('ubicacion', filtroUbicacion);
 
       const res = await fetch(`/api/productos?${params.toString()}`);
       const data = await res.json();
@@ -54,7 +68,7 @@ export default function TransferenciasPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch, filtroUbicacion]);
 
   useEffect(() => {
     if (vendedor) {
@@ -82,6 +96,7 @@ export default function TransferenciasPage() {
         codigo: product.codigo,
         descripcion: product.descripcion,
         cantidad: product.cantidad,
+        ubicacion: product.ubicacion || '',
       });
     }
   };
@@ -170,6 +185,32 @@ export default function TransferenciasPage() {
             onChange={setSearch}
             placeholder="Buscar por codigo o descripcion..."
           />
+          {/* Filtro por ubicacion */}
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setFiltroUbicacion('')}
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                filtroUbicacion === '' 
+                  ? 'bg-primary-800 text-white' 
+                  : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+              }`}
+            >
+              Todos
+            </button>
+            {UBICACIONES.map((ubi) => (
+              <button
+                key={ubi}
+                onClick={() => setFiltroUbicacion(ubi)}
+                className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                  filtroUbicacion === ubi 
+                    ? 'bg-primary-800 text-white' 
+                    : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                }`}
+              >
+                {ubi}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -194,6 +235,7 @@ export default function TransferenciasPage() {
               cantidad={producto.cantidad}
               vendedor={producto.vendedor}
               fotoUrl={producto.fotoUrl}
+              ubicacion={producto.ubicacion}
               createdAt={producto.createdAt}
               onView={handleView}
               onEdit={handleEdit}
@@ -260,6 +302,19 @@ export default function TransferenciasPage() {
                   className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Ubicacion</label>
+                <select
+                  value={editForm.ubicacion}
+                  onChange={(e) => setEditForm({ ...editForm, ubicacion: e.target.value })}
+                  className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Seleccionar...</option>
+                  {UBICACIONES.map((ubi) => (
+                    <option key={ubi} value={ubi}>{ubi}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="p-4 border-t border-primary-200 flex gap-3">
               <button
@@ -324,11 +379,16 @@ export default function TransferenciasPage() {
           >
             {/* Foto */}
             {viewingProduct.fotoUrl ? (
-              <img
-                src={viewingProduct.fotoUrl}
-                alt={viewingProduct.descripcion}
-                className="w-full h-64 object-cover"
-              />
+              <button
+                onClick={() => setImageFullscreen(viewingProduct.fotoUrl)}
+                className="w-full cursor-zoom-in"
+              >
+                <img
+                  src={viewingProduct.fotoUrl}
+                  alt={viewingProduct.descripcion}
+                  className="w-full h-64 object-cover"
+                />
+              </button>
             ) : (
               <div className="w-full h-40 bg-primary-100 flex items-center justify-center">
                 <svg className="w-16 h-16 text-primary-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -341,6 +401,15 @@ export default function TransferenciasPage() {
             <div className="p-4">
               <div className="flex items-start justify-between mb-3">
                 <h2 className="text-xl font-bold text-primary-900">{viewingProduct.codigo}</h2>
+                {viewingProduct.ubicacion && (
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    viewingProduct.ubicacion === 'Local' 
+                      ? 'bg-accent-100 text-accent-700' 
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {viewingProduct.ubicacion}
+                  </span>
+                )}
                 <span className="bg-primary-100 text-primary-800 text-sm font-medium px-3 py-1 rounded">
                   x{viewingProduct.cantidad}
                 </span>
@@ -372,6 +441,30 @@ export default function TransferenciasPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Lightbox para imagen a pantalla completa */}
+      {imageFullscreen && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] cursor-zoom-out"
+          onClick={() => setImageFullscreen(null)}
+        >
+          <button
+            onClick={() => setImageFullscreen(null)}
+            className="absolute top-4 right-4 text-white hover:text-primary-300 z-10"
+            aria-label="Cerrar"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={imageFullscreen}
+            alt="Imagen completa"
+            className="max-w-full max-h-full object-contain p-4"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </main>

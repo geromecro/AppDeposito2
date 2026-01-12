@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     const fechaHasta = new Date(hasta);
     fechaHasta.setHours(23, 59, 59, 999);
 
-    // Obtener productos en el rango
-    const productos = await prisma.producto.findMany({
+    // Obtener productos en el rango (modelo legacy)
+    const productos = await prisma.productoLegacy.findMany({
       where: {
         createdAt: {
           gte: fechaDesde,

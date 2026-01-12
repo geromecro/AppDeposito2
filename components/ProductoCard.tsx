@@ -8,6 +8,7 @@ interface ProductoCardProps {
   descripcion: string;
   cantidad: number;
   vendedor: string;
+  ubicacion?: string | null;
   fotoUrl?: string | null;
   createdAt: string;
   onView?: (id: number) => void;
@@ -21,6 +22,7 @@ export function ProductoCard({
   descripcion,
   cantidad,
   vendedor,
+  ubicacion,
   fotoUrl,
   createdAt,
   onView,
@@ -35,42 +37,36 @@ export function ProductoCard({
     minute: '2-digit',
   });
 
+  const ubicacionClass = ubicacion === 'Local' 
+    ? 'bg-green-100 text-green-700' 
+    : 'bg-blue-100 text-blue-700';
+
   return (
     <Card className="overflow-hidden">
       <div
         className={`flex ${onView ? 'cursor-pointer' : ''}`}
         onClick={() => onView?.(id)}
       >
-        {/* Foto o placeholder */}
         <div className="w-24 h-24 flex-shrink-0 bg-primary-100 flex items-center justify-center">
           {fotoUrl ? (
-            <img
-              src={fotoUrl}
-              alt={descripcion}
-              className="w-full h-full object-cover"
-            />
+            <img src={fotoUrl} alt={descripcion} className="w-full h-full object-cover" />
           ) : (
-            <svg
-              className="w-8 h-8 text-primary-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
+            <svg className="w-8 h-8 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           )}
         </div>
-
-        {/* Info */}
         <CardBody className="flex-1 py-2">
           <div className="flex items-start justify-between">
             <div>
-              <p className="font-semibold text-primary-900">{codigo}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-primary-900">{codigo}</p>
+                {ubicacion && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${ubicacionClass}`}>
+                    {ubicacion}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-primary-600 line-clamp-2">{descripcion}</p>
             </div>
             <span className="bg-primary-100 text-primary-800 text-sm font-medium px-2 py-1 rounded">
@@ -81,7 +77,6 @@ export function ProductoCard({
             <span>{vendedor}</span>
             <span>{fechaFormateada}</span>
           </div>
-          {/* Botones de acción */}
           {(onEdit || onDelete) && (
             <div className="flex gap-2 mt-2 pt-2 border-t border-primary-100">
               {onEdit && (

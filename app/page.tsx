@@ -11,17 +11,17 @@ export default function LoginPage() {
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
 
   useEffect(() => {
-    // Si ya hay un vendedor guardado, ir directo a transferencias
+    // Si ya hay un vendedor guardado, ir directo a inventario
     const vendedor = localStorage.getItem('vendedor');
     if (vendedor) {
-      router.push('/transferencias');
+      router.push('/inventario');
     }
   }, [router]);
 
   const handleSubmit = () => {
     if (selectedVendedor) {
       localStorage.setItem('vendedor', selectedVendedor);
-      router.push('/transferencias');
+      router.push('/inventario');
     }
   };
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
         <CardBody className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-primary-900">
-              Control de Traslado
+              Control de Inventario
             </h1>
             <p className="text-primary-600 mt-1">
               Selecciona tu nombre para continuar

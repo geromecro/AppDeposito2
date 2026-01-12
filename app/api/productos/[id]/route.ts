@@ -10,7 +10,7 @@ export async function GET(
     const params = await props.params;
     const id = parseInt(params.id);
 
-    const producto = await prisma.producto.findUnique({
+    const producto = await prisma.productoLegacy.findUnique({
       where: { id },
     });
 
@@ -41,7 +41,7 @@ export async function PUT(
     const id = parseInt(params.id);
     const body = await request.json();
 
-    const producto = await prisma.producto.update({
+    const producto = await prisma.productoLegacy.update({
       where: { id },
       data: body,
     });
@@ -65,7 +65,7 @@ export async function DELETE(
     const params = await props.params;
     const id = parseInt(params.id);
 
-    await prisma.producto.delete({
+    await prisma.productoLegacy.delete({
       where: { id },
     });
 
