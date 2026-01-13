@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
@@ -22,7 +22,16 @@ interface StockInfo {
   stockLocal: number;
 }
 
+// Wrapper component to handle Suspense for useSearchParams
 export default function NuevoMovimientoPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-primary-500">Cargando...</p></div>}>
+      <NuevoMovimientoContent />
+    </Suspense>
+  );
+}
+
+function NuevoMovimientoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
