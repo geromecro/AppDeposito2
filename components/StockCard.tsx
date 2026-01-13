@@ -41,14 +41,9 @@ export function StockCard({
           )}
         </div>
         <CardBody className="flex-1 py-2">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-primary-900 truncate">{producto.codigo}</p>
-              <p className="text-sm text-primary-600 line-clamp-1">{producto.descripcion}</p>
-            </div>
-            <span className="bg-primary-100 text-primary-800 text-sm font-medium px-2 py-1 rounded ml-2">
-              {total}
-            </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-primary-900 truncate">{producto.codigo}</p>
+            <p className="text-sm text-primary-600 line-clamp-1">{producto.descripcion}</p>
           </div>
           <div className="flex gap-4 mt-2">
             <div className={`text-sm ${sinStockDeposito ? 'text-error-600' : 'text-blue-600'}`}>
