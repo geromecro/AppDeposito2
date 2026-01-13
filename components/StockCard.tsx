@@ -31,7 +31,7 @@ export function StockCard({
         className={`flex ${onClick ? 'cursor-pointer' : ''}`}
         onClick={onClick}
       >
-        <div className="w-20 h-20 flex-shrink-0 bg-primary-100 flex items-center justify-center">
+        <div className="w-24 h-24 flex-shrink-0 bg-primary-100 flex items-center justify-center">
           {producto.fotoUrl ? (
             <img src={producto.fotoUrl} alt={producto.descripcion} className="w-full h-full object-cover" />
           ) : (

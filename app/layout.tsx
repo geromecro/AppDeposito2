@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { ToastProvider } from '@/components/Toast';
 
 export const metadata: Metadata = {
-  title: 'Control de Traslado - Deposito',
-  description: 'App para control de traslado de mercaderia al deposito',
+  title: 'Control de Inventario - Depósito',
+  description: 'App para gestión de inventario y control de stock',
 };
 
 export const viewport: Viewport = {
@@ -21,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="min-h-screen">
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

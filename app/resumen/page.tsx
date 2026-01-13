@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
+import { useToast } from '@/components/Toast';
 import { Card, CardBody, CardHeader } from '@/components/Card';
 
 interface Stats {
@@ -24,6 +25,7 @@ const formatDateForInput = (date: Date) => {
 
 export default function ResumenPage() {
   const router = useRouter();
+  const toast = useToast();
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(formatDateForInput(new Date()));
@@ -76,7 +78,7 @@ export default function ResumenPage() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Error exporting:', error);
-      alert('Error al exportar los datos');
+      toast.error('Error al exportar los datos');
     } finally {
       setIsExporting(false);
     }
@@ -95,7 +97,7 @@ export default function ResumenPage() {
       {/* Header */}
       <header className="sticky top-0 bg-white border-b border-primary-200 z-10">
         <div className="px-4 py-3 flex items-center gap-3">
-          <Link href="/transferencias" className="text-primary-600">
+          <Link href="/inventario" className="text-primary-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>

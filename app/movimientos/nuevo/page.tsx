@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 import { Button } from '@/components/Button';
+import { useToast } from '@/components/Toast';
 import { Input } from '@/components/Input';
 import { Card, CardBody } from '@/components/Card';
 import { UBICACIONES, TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TIPO_MOVIMIENTO_COLORS, TipoMovimiento } from '@/lib/constants';
@@ -23,7 +24,9 @@ interface StockInfo {
 
 export default function NuevoMovimientoPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   const [vendedor, setVendedor] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +63,33 @@ export default function NuevoMovimientoPage() {
     }
     setVendedor(storedVendedor);
   }, [router]);
+
+  // Precargar producto y tipo desde parámetros de URL
+  useEffect(() => {
+    const tipoParam = searchParams.get('tipo') as TipoMovimiento | null;
+    const productoIdParam = searchParams.get('productoId');
+
+    if (tipoParam && TIPOS_MOVIMIENTO.includes(tipoParam)) {
+      setTipo(tipoParam);
+    }
+
+    if (productoIdParam) {
+      // Cargar el producto por ID
+      fetch(`/api/stock?search=`)
+        .then(res => res.json())
+        .then(data => {
+          const producto = data.stock?.find((s: any) => s.producto.id === parseInt(productoIdParam));
+          if (producto) {
+            setProductoSeleccionado(producto.producto);
+            setStockInfo({
+              stockDeposito: producto.stockDeposito,
+              stockLocal: producto.stockLocal,
+            });
+          }
+        })
+        .catch(console.error);
+    }
+  }, [searchParams]);
 
   // Buscar productos existentes
   useEffect(() => {
@@ -163,7 +193,7 @@ export default function NuevoMovimientoPage() {
       setFotoUrl(data.url);
     } catch (error) {
       console.error('Error uploading:', error);
-      alert('Error al subir la imagen');
+      toast.error('Error al subir la imagen');
       setFotoPreview(null);
     } finally {
       setIsUploading(false);
