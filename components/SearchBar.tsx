@@ -20,7 +20,7 @@ export function SearchBar({
   return (
     <div className="relative">
       <svg
-        className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-400"
+        className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -37,14 +37,25 @@ export function SearchBar({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className="w-full pl-10 pr-4 py-3 text-base border border-primary-300 rounded-lg bg-white placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        className="
+          w-full pl-12 pr-12 py-3.5 text-base
+          bg-surface-100 border-0 rounded-xl
+          text-surface-900 placeholder:text-surface-400
+          focus:outline-none focus:ring-2 focus:ring-surface-900 focus:bg-white
+          transition-all duration-200
+        "
       />
       {value && (
         <button
           onClick={() => onChange('')}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-600"
+          className="
+            absolute right-3 top-1/2 -translate-y-1/2
+            w-8 h-8 flex items-center justify-center
+            text-surface-400 hover:text-surface-600 hover:bg-surface-200
+            rounded-lg transition-colors
+          "
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
