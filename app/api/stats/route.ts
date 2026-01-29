@@ -12,39 +12,74 @@ export async function GET(request: NextRequest) {
     const fechaFin = new Date(fechaInicio);
     fechaFin.setHours(23, 59, 59, 999);
 
-    // Total de productos (sin filtro de fecha) - modelo legacy
-    const totalProductos = await prisma.productoLegacy.count();
+    // Ejecutar queries en paralelo para mejor rendimiento
+    const [
+      totalProductos,
+      stockTotales,
+      movimientosDia,
+      porVendedorDia,
+      porTipoDia,
+    ] = await Promise.all([
+      // Total de productos en catálogo
+      prisma.producto.count(),
 
-    // Suma total de cantidades (sin filtro de fecha) - modelo legacy
-    const sumaCantidades = await prisma.productoLegacy.aggregate({
-      _sum: { cantidad: true },
-    });
+      // Total de unidades por ubicación (agregado)
+      prisma.stock.groupBy({
+        by: ['ubicacion'],
+        _sum: { cantidad: true },
+      }),
 
-    // Productos del día seleccionado - modelo legacy
-    const productosDia = await prisma.productoLegacy.count({
-      where: {
-        createdAt: { gte: fechaInicio, lte: fechaFin },
-      },
-    });
+      // Movimientos del día
+      prisma.movimiento.count({
+        where: {
+          createdAt: { gte: fechaInicio, lte: fechaFin },
+        },
+      }),
 
-    // Productos por vendedor del día seleccionado - modelo legacy
-    const porVendedor = await prisma.productoLegacy.groupBy({
-      by: ['vendedor'],
-      where: {
-        createdAt: { gte: fechaInicio, lte: fechaFin },
-      },
-      _count: { id: true },
-      _sum: { cantidad: true },
-    });
+      // Movimientos por vendedor del día
+      prisma.movimiento.groupBy({
+        by: ['vendedor'],
+        where: {
+          createdAt: { gte: fechaInicio, lte: fechaFin },
+        },
+        _count: { id: true },
+        _sum: { cantidad: true },
+      }),
+
+      // Movimientos por tipo del día
+      prisma.movimiento.groupBy({
+        by: ['tipo'],
+        where: {
+          createdAt: { gte: fechaInicio, lte: fechaFin },
+        },
+        _count: { id: true },
+        _sum: { cantidad: true },
+      }),
+    ]);
+
+    // Calcular totales por ubicación
+    const stockPorUbicacion: Record<string, number> = {};
+    let totalUnidades = 0;
+    for (const s of stockTotales) {
+      const cantidad = s._sum?.cantidad || 0;
+      stockPorUbicacion[s.ubicacion] = cantidad;
+      totalUnidades += cantidad;
+    }
 
     return NextResponse.json({
       totalProductos,
-      totalUnidades: sumaCantidades._sum?.cantidad || 0,
-      productosDia,
-      porVendedor: porVendedor.map((v) => ({
+      totalUnidades,
+      stockPorUbicacion,
+      movimientosDia,
+      porVendedor: porVendedorDia.map((v) => ({
         vendedor: v.vendedor,
         registros: v._count?.id || 0,
         unidades: v._sum?.cantidad || 0,
+      })),
+      porTipo: porTipoDia.map((t) => ({
+        tipo: t.tipo,
+        registros: t._count?.id || 0,
+        unidades: t._sum?.cantidad || 0,
       })),
     });
   } catch (error) {

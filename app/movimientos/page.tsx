@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { MovimientoCard } from '@/components/MovimientoCard';
-import { TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TipoMovimiento } from '@/lib/constants';
+import { TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TipoMovimiento, VENDEDORES } from '@/lib/constants';
 
 interface Movimiento {
   id: number;
@@ -25,9 +25,21 @@ interface Movimiento {
 }
 
 export default function MovimientosPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-primary-500">Cargando...</p></div>}>
+      <MovimientosContent />
+    </Suspense>
+  );
+}
+
+function MovimientosContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | ''>('');
+  const [filtroVendedor, setFiltroVendedor] = useState('');
+  const [filtroProductoId, setFiltroProductoId] = useState<string | null>(null);
+  const [productoNombre, setProductoNombre] = useState<string | null>(null);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -40,25 +52,38 @@ export default function MovimientosPage() {
       return;
     }
     setVendedor(storedVendedor);
-  }, [router]);
+
+    // Leer productoId de la URL si existe
+    const productoIdParam = searchParams.get('productoId');
+    if (productoIdParam) {
+      setFiltroProductoId(productoIdParam);
+    }
+  }, [router, searchParams]);
 
   const fetchMovimientos = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
       if (filtroTipo) params.set('tipo', filtroTipo);
+      if (filtroVendedor) params.set('vendedor', filtroVendedor);
+      if (filtroProductoId) params.set('productoId', filtroProductoId);
       if (fechaDesde) params.set('fechaDesde', fechaDesde);
       if (fechaHasta) params.set('fechaHasta', fechaHasta);
 
       const res = await fetch(`/api/movimientos?${params.toString()}`);
       const data = await res.json();
       setMovimientos(data.movimientos || []);
+
+      // Obtener nombre del producto si hay filtro por productoId
+      if (filtroProductoId && data.movimientos?.length > 0) {
+        setProductoNombre(data.movimientos[0].producto.codigo);
+      }
     } catch (error) {
       console.error('Error fetching movimientos:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [filtroTipo, fechaDesde, fechaHasta]);
+  }, [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     if (vendedor) {
@@ -99,6 +124,28 @@ export default function MovimientosPage() {
             </Button>
           </div>
 
+          {/* Badge de producto filtrado */}
+          {filtroProductoId && productoNombre && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm text-primary-600">Producto:</span>
+              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2">
+                {productoNombre}
+                <button
+                  onClick={() => {
+                    setFiltroProductoId(null);
+                    setProductoNombre(null);
+                    router.replace('/movimientos');
+                  }}
+                  className="hover:bg-blue-200 rounded-full p-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* Filtros por tipo */}
           <div className="flex gap-2 mb-3 flex-wrap">
             <button
@@ -124,6 +171,20 @@ export default function MovimientosPage() {
                 {TIPO_MOVIMIENTO_LABELS[tipo]}
               </button>
             ))}
+          </div>
+
+          {/* Filtro por vendedor */}
+          <div className="mb-3">
+            <select
+              value={filtroVendedor}
+              onChange={(e) => setFiltroVendedor(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Todos los vendedores</option>
+              {VENDEDORES.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
 
           {/* Filtros por fecha */}

@@ -63,6 +63,8 @@ function NuevoMovimientoContent() {
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastSavedProducto, setLastSavedProducto] = useState<ProductoExistente | null>(null);
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -292,7 +294,15 @@ function NuevoMovimientoContent() {
         throw new Error(data.error || 'Error al registrar movimiento');
       }
 
-      router.push('/inventario');
+      toast.success('Movimiento registrado correctamente');
+
+      // Guardar producto para posible duplicación
+      if (productoSeleccionado) {
+        setLastSavedProducto(productoSeleccionado);
+        setShowSuccessModal(true);
+      } else {
+        router.push('/inventario');
+      }
     } catch (error: any) {
       console.error('Error saving:', error);
       setError(error.message || 'Error al registrar movimiento');
@@ -518,14 +528,29 @@ function NuevoMovimientoContent() {
                   </div>
                 )}
 
-                <Input
-                  label="Cantidad *"
-                  type="number"
-                  min="1"
-                  max={tipo !== 'ENTRADA' && stockInfo ? getStockDisponible() : undefined}
-                  value={cantidad}
-                  onChange={(e) => setCantidad(e.target.value)}
-                />
+                <div>
+                  <Input
+                    label="Cantidad *"
+                    type="number"
+                    min="1"
+                    max={tipo !== 'ENTRADA' && stockInfo ? getStockDisponible() : undefined}
+                    value={cantidad}
+                    onChange={(e) => setCantidad(e.target.value)}
+                  />
+                  {tipo !== 'ENTRADA' && stockInfo && ubicacionOrigen && (
+                    <div className="mt-1">
+                      {parseInt(cantidad) > getStockDisponible() ? (
+                        <p className="text-xs text-error-600 font-medium">
+                          Stock insuficiente. Disponible: {getStockDisponible()} unidades
+                        </p>
+                      ) : (
+                        <p className="text-xs text-primary-500">
+                          Disponible: {getStockDisponible()} unidades
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <Input
                   label="Nota (opcional)"
@@ -600,6 +625,59 @@ function NuevoMovimientoContent() {
           </>
         )}
       </form>
+
+      {/* Modal de éxito con opción de duplicar */}
+      {showSuccessModal && lastSavedProducto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-sm p-6">
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-accent-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-8 h-8 text-accent-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-primary-900">Movimiento registrado</h3>
+              <p className="text-sm text-primary-600 mt-1">
+                {lastSavedProducto.codigo}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Button
+                onClick={() => {
+                  // Resetear formulario pero mantener producto y tipo
+                  setCantidad('1');
+                  setNota('');
+                  setUbicacionOrigen('');
+                  setUbicacionDestino('');
+                  setShowSuccessModal(false);
+                  // Recargar stock del producto
+                  fetch(`/api/stock?search=${encodeURIComponent(lastSavedProducto.codigo)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                      const stockItem = data.stock?.find((s: any) => s.producto.id === lastSavedProducto.id);
+                      if (stockItem) {
+                        setStockInfo({
+                          stockDeposito: stockItem.stockDeposito,
+                          stockLocal: stockItem.stockLocal,
+                        });
+                      }
+                    });
+                }}
+                className="w-full"
+              >
+                Agregar otro movimiento
+              </Button>
+              <button
+                onClick={() => router.push('/inventario')}
+                className="w-full px-4 py-2 border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50"
+              >
+                Volver al inventario
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

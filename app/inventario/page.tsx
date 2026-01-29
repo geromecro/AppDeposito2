@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
@@ -45,6 +45,7 @@ export default function InventarioPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtroUbicacion, setFiltroUbicacion] = useState('');
   const [sinStock, setSinStock] = useState(false);
+  const [ordenamiento, setOrdenamiento] = useState<'default' | 'mayor' | 'menor'>('default');
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
@@ -53,6 +54,7 @@ export default function InventarioPage() {
   const [imageFullscreen, setImageFullscreen] = useState<string | null>(null);
   const [productMovimientos, setProductMovimientos] = useState<Movimiento[]>([]);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
+  const [cachedMovimientos, setCachedMovimientos] = useState<Record<number, Movimiento[]>>({});
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -105,17 +107,40 @@ export default function InventarioPage() {
     setProductMovimientos([]);
   };
 
-  // Cargar movimientos cuando se abre el modal
+  // Cargar movimientos cuando se abre el modal (con cache)
   useEffect(() => {
     if (viewingProduct) {
+      const productId = viewingProduct.producto.id;
+
+      // Usar cache si existe
+      if (cachedMovimientos[productId]) {
+        setProductMovimientos(cachedMovimientos[productId]);
+        return;
+      }
+
       setLoadingMovimientos(true);
-      fetch(`/api/movimientos?productoId=${viewingProduct.producto.id}&limit=5`)
+      fetch(`/api/movimientos?productoId=${productId}&limit=5`)
         .then(res => res.json())
-        .then(data => setProductMovimientos(data.movimientos || []))
+        .then(data => {
+          const movimientos = data.movimientos || [];
+          setProductMovimientos(movimientos);
+          setCachedMovimientos(prev => ({ ...prev, [productId]: movimientos }));
+        })
         .catch(console.error)
         .finally(() => setLoadingMovimientos(false));
     }
-  }, [viewingProduct]);
+  }, [viewingProduct, cachedMovimientos]);
+
+  // Ordenar stock según el criterio seleccionado
+  const stockOrdenado = useMemo(() => {
+    if (ordenamiento === 'mayor') {
+      return [...stock].sort((a, b) => b.total - a.total);
+    }
+    if (ordenamiento === 'menor') {
+      return [...stock].sort((a, b) => a.total - b.total);
+    }
+    return stock;
+  }, [stock, ordenamiento]);
 
   if (!vendedor) {
     return null;
@@ -210,6 +235,39 @@ export default function InventarioPage() {
             >
               Sin stock
             </button>
+
+            {/* Separador */}
+            <div className="w-px h-6 bg-primary-300 mx-1" />
+
+            {/* Botones de ordenamiento */}
+            <button
+              onClick={() => setOrdenamiento(ordenamiento === 'mayor' ? 'default' : 'mayor')}
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1 ${
+                ordenamiento === 'mayor'
+                  ? 'bg-primary-800 text-white'
+                  : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+              }`}
+              title="Ordenar de mayor a menor"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              Mayor
+            </button>
+            <button
+              onClick={() => setOrdenamiento(ordenamiento === 'menor' ? 'default' : 'menor')}
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1 ${
+                ordenamiento === 'menor'
+                  ? 'bg-primary-800 text-white'
+                  : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+              }`}
+              title="Ordenar de menor a mayor"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+              Menor
+            </button>
           </div>
         </div>
       </header>
@@ -218,7 +276,7 @@ export default function InventarioPage() {
       <div className="p-4 space-y-3">
         {isLoading ? (
           <div className="text-center py-8 text-primary-500">Cargando...</div>
-        ) : stock.length === 0 ? (
+        ) : stockOrdenado.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-primary-500">No hay productos en inventario</p>
             <p className="text-sm text-primary-400 mt-1">
@@ -226,7 +284,7 @@ export default function InventarioPage() {
             </p>
           </div>
         ) : (
-          stock.map((item) => (
+          stockOrdenado.map((item) => (
             <StockCard
               key={item.producto.id}
               producto={item.producto}
@@ -242,10 +300,11 @@ export default function InventarioPage() {
       {/* Refresh button */}
       <button
         onClick={fetchStock}
-        className="fixed bottom-24 right-4 w-12 h-12 bg-primary-200 text-primary-700 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-300 transition-colors"
+        disabled={isLoading}
+        className="fixed bottom-24 right-4 w-12 h-12 bg-primary-200 text-primary-700 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-300 transition-colors disabled:opacity-50"
         aria-label="Actualizar"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </button>
@@ -315,7 +374,17 @@ export default function InventarioPage() {
 
               {/* Últimos movimientos */}
               <div className="border-t border-primary-100 pt-3">
-                <h3 className="text-sm font-medium text-primary-700 mb-2">Últimos movimientos</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-primary-700">Últimos movimientos</h3>
+                  {productMovimientos.length > 0 && (
+                    <Link
+                      href={`/movimientos?productoId=${viewingProduct.producto.id}`}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Ver todo →
+                    </Link>
+                  )}
+                </div>
                 {loadingMovimientos ? (
                   <p className="text-sm text-primary-400">Cargando...</p>
                 ) : productMovimientos.length === 0 ? (

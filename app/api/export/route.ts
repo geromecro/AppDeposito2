@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const desde = searchParams.get('desde');
     const hasta = searchParams.get('hasta');
+    const vendedor = searchParams.get('vendedor');
+    const tipo = searchParams.get('tipo');
 
     if (!desde || !hasta) {
       return NextResponse.json(
@@ -20,28 +22,63 @@ export async function GET(request: NextRequest) {
     const fechaHasta = new Date(hasta);
     fechaHasta.setHours(23, 59, 59, 999);
 
-    // Obtener productos en el rango (modelo legacy)
-    const productos = await prisma.productoLegacy.findMany({
-      where: {
-        createdAt: {
-          gte: fechaDesde,
-          lte: fechaHasta,
+    // Construir filtros
+    const whereClause: any = {
+      createdAt: {
+        gte: fechaDesde,
+        lte: fechaHasta,
+      },
+    };
+
+    if (vendedor) {
+      whereClause.vendedor = vendedor;
+    }
+
+    if (tipo) {
+      whereClause.tipo = tipo;
+    }
+
+    // Obtener movimientos con producto incluido
+    const movimientos = await prisma.movimiento.findMany({
+      where: whereClause,
+      include: {
+        producto: {
+          select: {
+            codigo: true,
+            descripcion: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     // Generar CSV
-    const headers = ['Codigo', 'Descripcion', 'Cantidad', 'Vendedor', 'Fecha', 'Hora'];
-    const rows = productos.map((p) => {
-      const fecha = new Date(p.createdAt);
+    const headers = [
+      'Fecha',
+      'Hora',
+      'Tipo',
+      'Codigo',
+      'Descripcion',
+      'Cantidad',
+      'Origen',
+      'Destino',
+      'Vendedor',
+      'Nota',
+    ];
+
+    const rows = movimientos.map((m) => {
+      const fecha = new Date(m.createdAt);
       return [
-        `"${p.codigo.replace(/"/g, '""')}"`,
-        `"${p.descripcion.replace(/"/g, '""')}"`,
-        p.cantidad.toString(),
-        `"${p.vendedor.replace(/"/g, '""')}"`,
         `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`,
         `${fecha.getHours().toString().padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`,
+        m.tipo,
+        `"${m.producto.codigo.replace(/"/g, '""')}"`,
+        `"${m.producto.descripcion.replace(/"/g, '""')}"`,
+        m.cantidad.toString(),
+        m.ubicacionOrigen || '-',
+        m.ubicacionDestino || '-',
+        `"${m.vendedor.replace(/"/g, '""')}"`,
+        m.nota ? `"${m.nota.replace(/"/g, '""')}"` : '',
       ];
     });
 
@@ -52,7 +89,7 @@ export async function GET(request: NextRequest) {
     const csvWithBOM = BOM + csv;
 
     // Nombre del archivo con rango de fechas
-    const filename = `productos_${desde}_${hasta}.csv`;
+    const filename = `movimientos_${desde}_${hasta}.csv`;
 
     return new NextResponse(csvWithBOM, {
       headers: {
@@ -61,9 +98,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error exporting productos:', error);
+    console.error('Error exporting movimientos:', error);
     return NextResponse.json(
-      { error: 'Error al exportar productos' },
+      { error: 'Error al exportar movimientos' },
       { status: 500 }
     );
   }

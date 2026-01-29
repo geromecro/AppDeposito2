@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const tipo = searchParams.get('tipo') as TipoMovimiento | null;
     const productoId = searchParams.get('productoId');
+    const vendedor = searchParams.get('vendedor');
     const fechaDesde = searchParams.get('fechaDesde');
     const fechaHasta = searchParams.get('fechaHasta');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest) {
 
     if (productoId) {
       whereClause.productoId = parseInt(productoId);
+    }
+
+    if (vendedor) {
+      whereClause.vendedor = vendedor;
     }
 
     if (fechaDesde || fechaHasta) {

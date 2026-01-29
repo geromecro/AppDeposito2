@@ -60,6 +60,7 @@ model Movimiento {
   @@index([productoId])
   @@index([createdAt])
   @@index([tipo])
+  @@index([vendedor])
 }
 
 model Stock {
