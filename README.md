@@ -1,6 +1,15 @@
-# App Control de Traslado de Mercadería
+# App Depósito - Gestión de Inventario
 
-Aplicación móvil-first para registrar el traslado de mercadería desde el local de repuestos/autopartes hacia el nuevo depósito.
+Aplicación móvil-first para gestión de inventario entre ubicaciones (Local y Depósito). Permite registrar movimientos de mercadería (entradas, traslados, salidas) con captura opcional de fotos, manteniendo stock en tiempo real por ubicación.
+
+## Funcionalidades
+
+- **Inventario**: Vista de stock por ubicación con búsqueda y filtros
+- **Movimientos**: Registro de entradas, traslados entre ubicaciones y salidas
+- **Historial**: Lista de movimientos con filtros por tipo, vendedor, fecha y producto
+- **Exportación**: Descarga de movimientos en formato CSV
+- **Estadísticas**: Dashboard con métricas de inventario
+- **Fotos**: Captura de imágenes de productos y movimientos
 
 ## Setup Inicial
 
@@ -65,16 +74,27 @@ Para agregar/modificar vendedores, editar `lib/constants.ts`
 ```
 app/
 ├── page.tsx                    # Login (seleccionar vendedor)
-├── transferencias/
-│   ├── page.tsx               # Lista de productos trasladados
-│   └── nueva/page.tsx         # Formulario con cámara
-├── resumen/
-│   └── page.tsx               # Estadísticas
+├── inventario/page.tsx         # Stock por ubicación con búsqueda
+├── movimientos/
+│   ├── page.tsx               # Historial de movimientos
+│   └── nuevo/page.tsx         # Crear movimiento (entrada/traslado/salida)
+├── resumen/page.tsx           # Estadísticas y métricas
 └── api/
-    ├── productos/             # CRUD de productos
-    ├── upload/                # Subida de fotos
-    └── stats/                 # Estadísticas
+    ├── productos/             # CRUD catálogo de productos
+    ├── movimientos/           # CRUD movimientos
+    ├── stock/                 # Consultas de stock por ubicación
+    ├── stats/                 # Estadísticas agregadas
+    ├── export/                # Exportación CSV
+    └── upload/                # Subida de fotos a Supabase
 ```
+
+## Tipos de Movimiento
+
+| Tipo | Descripción | Efecto en Stock |
+|------|-------------|-----------------|
+| ENTRADA | Producto ingresa al inventario | +cantidad en destino |
+| TRASLADO | Producto se mueve entre ubicaciones | -origen, +destino |
+| SALIDA | Producto sale del inventario | -cantidad en origen |
 
 ## Deploy a Vercel
 
@@ -82,12 +102,3 @@ app/
 2. Conectar repo en Vercel
 3. Agregar variables de entorno en Vercel Dashboard
 4. Deploy automático
-
-## Uso
-
-1. Abrir la app en el celular
-2. Seleccionar tu nombre
-3. Tocar "+" para agregar producto
-4. Completar código y descripción
-5. Opcionalmente tomar foto
-6. Guardar
