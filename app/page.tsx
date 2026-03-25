@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { VENDEDORES } from '@/lib/constants';
+import { fetchClientSession } from '@/lib/client-session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,18 +11,43 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const vendedor = localStorage.getItem('vendedor');
-    if (vendedor) {
-      router.push('/inventario');
-    } else {
-      setIsLoading(false);
-    }
+    let active = true;
+
+    fetchClientSession()
+      .then((session) => {
+        if (!active) return;
+
+        if (session.authenticated) {
+          router.replace('/inventario');
+          return;
+        }
+
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (selectedVendedor) {
-      localStorage.setItem('vendedor', selectedVendedor);
-      router.push('/inventario');
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedor: selectedVendedor }),
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      router.replace('/inventario');
     }
   };
 

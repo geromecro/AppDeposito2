@@ -40,6 +40,7 @@ Crear archivo `.env` en la raíz del proyecto:
 DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT-REF].supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGci..."
+SESSION_SECRET="cambiar-por-un-secreto-largo-y-unico"
 ```
 
 ### 4. Inicializar base de datos

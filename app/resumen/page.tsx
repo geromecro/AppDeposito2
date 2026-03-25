@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
+import { clearClientSession, fetchClientSession } from '@/lib/client-session';
+import { formatDateForInput } from '@/lib/date-utils';
 
 interface Stats {
   totalProductos: number;
   totalUnidades: number;
-  productosDia: number;
+  movimientosDia: number;
   porVendedor: {
     vendedor: string;
     registros: number;
@@ -17,17 +19,12 @@ interface Stats {
   }[];
 }
 
-const formatDateForInput = (date: Date) => {
-  return date.toISOString().split('T')[0];
-};
-
 export default function ResumenPage() {
   const router = useRouter();
   const toast = useToast();
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(formatDateForInput(new Date()));
-
   const [fechaDesde, setFechaDesde] = useState(() => {
     const hace30Dias = new Date();
     hace30Dias.setDate(hace30Dias.getDate() - 30);
@@ -37,12 +34,28 @@ export default function ResumenPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    const storedVendedor = localStorage.getItem('vendedor');
-    if (!storedVendedor) {
-      router.push('/');
-      return;
-    }
-    fetchStats(fechaSeleccionada);
+    let active = true;
+
+    fetchClientSession()
+      .then((session) => {
+        if (!active) return;
+
+        if (!session.authenticated) {
+          router.replace('/');
+          return;
+        }
+
+        fetchStats(fechaSeleccionada);
+      })
+      .catch(() => {
+        if (active) {
+          router.replace('/');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router, fechaSeleccionada]);
 
   const fetchStats = async (fecha: string) => {
@@ -92,7 +105,6 @@ export default function ResumenPage() {
 
   return (
     <main className="min-h-screen bg-surface-100 pb-8">
-      {/* Header */}
       <header className="sticky top-0 glass border-b border-surface-200 z-10">
         <div className="px-4 py-4">
           <div className="flex items-center gap-3 mb-4">
@@ -106,7 +118,6 @@ export default function ResumenPage() {
             <h1 className="text-xl font-bold text-surface-900">Resumen</h1>
           </div>
 
-          {/* Date selector */}
           <input
             type="date"
             value={fechaSeleccionada}
@@ -124,55 +135,47 @@ export default function ResumenPage() {
       </header>
 
       <div className="p-4 space-y-4">
-        {/* Stats cards */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white border border-surface-200 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-3xl font-bold text-surface-900">
-              {stats?.totalProductos || 0}
-            </p>
+            <p className="text-3xl font-bold text-surface-900">{stats?.totalProductos || 0}</p>
             <p className="text-sm text-surface-500 mt-1">Registros totales</p>
           </div>
 
           <div className="bg-white border border-surface-200 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-3xl font-bold text-surface-900">
-              {stats?.totalUnidades || 0}
-            </p>
+            <p className="text-3xl font-bold text-surface-900">{stats?.totalUnidades || 0}</p>
             <p className="text-sm text-surface-500 mt-1">Unidades totales</p>
           </div>
 
           <div className="col-span-2 bg-gradient-to-br from-accent-500 to-accent-600 rounded-2xl p-5 text-center shadow-lg shadow-accent-500/20">
-            <p className="text-4xl font-bold text-white">
-              {stats?.productosDia || 0}
-            </p>
+            <p className="text-4xl font-bold text-white">{stats?.movimientosDia || 0}</p>
             <p className="text-sm text-accent-100 mt-1">Registros del día</p>
           </div>
         </div>
 
-        {/* By vendor */}
         <div className="bg-white border border-surface-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-100">
-            <h2 className="font-semibold text-surface-900">Por Vendedor (del día)</h2>
+            <h2 className="font-semibold text-surface-900">Por vendedor (del día)</h2>
           </div>
           <div className="p-4">
             {stats?.porVendedor && stats.porVendedor.length > 0 ? (
               <div className="space-y-3">
                 {stats.porVendedor
                   .sort((a, b) => b.unidades - a.unidades)
-                  .map((v, index) => (
+                  .map((vendedor, index) => (
                     <div
-                      key={v.vendedor}
+                      key={vendedor.vendedor}
                       className="flex items-center gap-3 animate-fade-in"
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
                       <div className="w-10 h-10 rounded-xl bg-surface-100 flex items-center justify-center text-sm font-semibold text-surface-600">
-                        {v.vendedor.charAt(0).toUpperCase()}
+                        {vendedor.vendedor.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-surface-800 truncate">{v.vendedor}</p>
-                        <p className="text-xs text-surface-500">{v.registros} registros</p>
+                        <p className="font-medium text-surface-800 truncate">{vendedor.vendedor}</p>
+                        <p className="text-xs text-surface-500">{vendedor.registros} registros</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-surface-900">{v.unidades}</p>
+                        <p className="text-lg font-bold text-surface-900">{vendedor.unidades}</p>
                         <p className="text-xs text-surface-500">unidades</p>
                       </div>
                     </div>
@@ -191,7 +194,6 @@ export default function ResumenPage() {
           </div>
         </div>
 
-        {/* Export */}
         <div className="bg-white border border-surface-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-100">
             <h2 className="font-semibold text-surface-900">Exportar a CSV</h2>
@@ -247,16 +249,22 @@ export default function ResumenPage() {
           </div>
         </div>
 
-        {/* Refresh button */}
-        <Button
-          onClick={() => fetchStats(fechaSeleccionada)}
-          variant="secondary"
-          className="w-full"
-        >
+        <Button onClick={() => fetchStats(fechaSeleccionada)} variant="secondary" className="w-full">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Actualizar datos
+        </Button>
+
+        <Button
+          onClick={async () => {
+            await clearClientSession();
+            router.replace('/');
+          }}
+          variant="ghost"
+          className="w-full"
+        >
+          Cerrar sesión
         </Button>
       </div>
     </main>

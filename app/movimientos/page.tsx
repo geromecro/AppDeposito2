@@ -8,6 +8,7 @@ import { MovimientoCard } from '@/components/MovimientoCard';
 import { EditMovimientoModal } from '@/components/EditMovimientoModal';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TipoMovimiento, VENDEDORES } from '@/lib/constants';
+import { clearClientSession, fetchClientSession } from '@/lib/client-session';
 
 interface Movimiento {
   id: number;
@@ -55,23 +56,39 @@ function MovimientosContent() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const storedVendedor = localStorage.getItem('vendedor');
-    if (!storedVendedor) {
-      router.push('/');
-      return;
-    }
-    setVendedor(storedVendedor);
+    let active = true;
 
-    const productoIdParam = searchParams.get('productoId');
-    if (productoIdParam) {
-      setFiltroProductoId(productoIdParam);
-    }
+    fetchClientSession()
+      .then((session) => {
+        if (!active) return;
+
+        if (!session.authenticated || !session.vendedor) {
+          router.replace('/');
+          return;
+        }
+
+        setVendedor(session.vendedor);
+        const productoIdParam = searchParams.get('productoId');
+        if (productoIdParam) {
+          setFiltroProductoId(productoIdParam);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          router.replace('/');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router, searchParams]);
 
   const fetchMovimientos = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
+      params.set('limit', '200');
       if (filtroTipo) params.set('tipo', filtroTipo);
       if (filtroVendedor) params.set('vendedor', filtroVendedor);
       if (filtroProductoId) params.set('productoId', filtroProductoId);
@@ -98,9 +115,9 @@ function MovimientosContent() {
     }
   }, [vendedor, fetchMovimientos]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('vendedor');
-    router.push('/');
+  const handleLogout = async () => {
+    await clearClientSession();
+    router.replace('/');
   };
 
   const handleDeleteConfirm = async () => {
@@ -109,8 +126,6 @@ function MovimientosContent() {
     try {
       const res = await fetch(`/api/movimientos/${deletingMovimiento.id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendedor }),
       });
       const data = await res.json();
       if (!res.ok) {

@@ -10,6 +10,7 @@ import { EditMovimientoModal } from '@/components/EditMovimientoModal';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { HistorialList } from '@/components/HistorialList';
 import { UBICACIONES, TIPO_MOVIMIENTO_LABELS } from '@/lib/constants';
+import { clearClientSession, fetchClientSession } from '@/lib/client-session';
 
 interface StockItem {
   producto: {
@@ -79,12 +80,28 @@ export default function InventarioPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const storedVendedor = localStorage.getItem('vendedor');
-    if (!storedVendedor) {
-      router.push('/');
-      return;
-    }
-    setVendedor(storedVendedor);
+    let active = true;
+
+    fetchClientSession()
+      .then((session) => {
+        if (!active) return;
+
+        if (!session.authenticated || !session.vendedor) {
+          router.replace('/');
+          return;
+        }
+
+        setVendedor(session.vendedor);
+      })
+      .catch(() => {
+        if (active) {
+          router.replace('/');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -119,9 +136,9 @@ export default function InventarioPage() {
     }
   }, [vendedor, fetchStock]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('vendedor');
-    router.push('/');
+  const handleLogout = async () => {
+    await clearClientSession();
+    router.replace('/');
   };
 
   const handleViewProduct = (item: StockItem) => {
@@ -147,7 +164,7 @@ export default function InventarioPage() {
       const res = await fetch(`/api/productos-catalogo/${viewingProduct.producto.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: editCodigo, descripcion: editDescripcion, vendedor }),
+        body: JSON.stringify({ codigo: editCodigo, descripcion: editDescripcion }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -176,8 +193,6 @@ export default function InventarioPage() {
     try {
       const res = await fetch(`/api/movimientos/${deletingMovimiento.id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendedor }),
       });
       const data = await res.json();
       if (!res.ok) {

@@ -1,26 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { TipoMovimiento } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
+import { applyStockOperations, getStockOperations, StockError } from '@/lib/stock-utils';
+import { parseLocalDateEnd, parseLocalDateStart } from '@/lib/date-utils';
+import { TIPOS_MOVIMIENTO, UBICACIONES } from '@/lib/constants';
+
+const VALID_TIPOS = new Set<string>(TIPOS_MOVIMIENTO);
+const VALID_UBICACIONES = new Set<string>(UBICACIONES);
+
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 });
+}
 
 // GET - Listar movimientos con filtros
 export async function GET(request: NextRequest) {
   try {
+    requireSession(request);
+
     const searchParams = request.nextUrl.searchParams;
     const tipo = searchParams.get('tipo') as TipoMovimiento | null;
     const productoId = searchParams.get('productoId');
     const vendedor = searchParams.get('vendedor');
     const fechaDesde = searchParams.get('fechaDesde');
     const fechaHasta = searchParams.get('fechaHasta');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-    const whereClause: any = {};
+    const whereClause: {
+      tipo?: TipoMovimiento;
+      productoId?: number;
+      vendedor?: string;
+      createdAt?: {
+        gte?: Date;
+        lte?: Date;
+      };
+    } = {};
 
     if (tipo) {
       whereClause.tipo = tipo;
     }
 
     if (productoId) {
-      whereClause.productoId = parseInt(productoId);
+      whereClause.productoId = parseInt(productoId, 10);
     }
 
     if (vendedor) {
@@ -30,12 +51,10 @@ export async function GET(request: NextRequest) {
     if (fechaDesde || fechaHasta) {
       whereClause.createdAt = {};
       if (fechaDesde) {
-        whereClause.createdAt.gte = new Date(fechaDesde);
+        whereClause.createdAt.gte = parseLocalDateStart(fechaDesde);
       }
       if (fechaHasta) {
-        const hasta = new Date(fechaHasta);
-        hasta.setHours(23, 59, 59, 999);
-        whereClause.createdAt.lte = hasta;
+        whereClause.createdAt.lte = parseLocalDateEnd(fechaHasta);
       }
     }
 
@@ -52,11 +71,15 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      take: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 500) : 50,
     });
 
     return NextResponse.json({ movimientos });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error fetching movimientos:', error);
     return NextResponse.json(
       { error: 'Error al obtener movimientos' },
@@ -68,68 +91,64 @@ export async function GET(request: NextRequest) {
 // POST - Registrar nuevo movimiento (con actualización de stock transaccional)
 export async function POST(request: NextRequest) {
   try {
+    const session = requireSession(request);
     const body = await request.json();
-    const {
-      tipo,
-      productoId,
-      codigo,
-      descripcion,
-      cantidad,
-      ubicacionOrigen,
-      ubicacionDestino,
-      vendedor,
-      nota,
-      fotoUrl,
-    } = body;
 
-    // Validaciones básicas
-    if (!tipo || !cantidad || !vendedor) {
-      return NextResponse.json(
-        { error: 'Tipo, cantidad y vendedor son requeridos' },
-        { status: 400 }
-      );
+    const tipo = typeof body?.tipo === 'string' ? body.tipo : '';
+    const productoId = body?.productoId;
+    const codigo = typeof body?.codigo === 'string' ? body.codigo.trim() : '';
+    const descripcion = typeof body?.descripcion === 'string' ? body.descripcion.trim() : '';
+    const cantidad = Number(body?.cantidad);
+    const ubicacionOrigen = typeof body?.ubicacionOrigen === 'string' ? body.ubicacionOrigen : null;
+    const ubicacionDestino = typeof body?.ubicacionDestino === 'string' ? body.ubicacionDestino : null;
+    const nota = typeof body?.nota === 'string' ? body.nota.trim() : null;
+    const fotoUrl = typeof body?.fotoUrl === 'string' ? body.fotoUrl : null;
+
+    if (!VALID_TIPOS.has(tipo)) {
+      return badRequest('Tipo de movimiento inválido');
+    }
+
+    if (!Number.isInteger(cantidad) || cantidad < 1) {
+      return badRequest('La cantidad debe ser un entero positivo');
     }
 
     if (!productoId && (!codigo || !descripcion)) {
-      return NextResponse.json(
-        { error: 'Debe proporcionar productoId o codigo+descripcion para crear nuevo producto' },
-        { status: 400 }
-      );
+      return badRequest('Debe proporcionar productoId o codigo+descripcion para crear nuevo producto');
     }
 
-    // Validar según tipo de movimiento
+    if (ubicacionOrigen && !VALID_UBICACIONES.has(ubicacionOrigen)) {
+      return badRequest('Ubicación origen inválida');
+    }
+
+    if (ubicacionDestino && !VALID_UBICACIONES.has(ubicacionDestino)) {
+      return badRequest('Ubicación destino inválida');
+    }
+
     if (tipo === 'ENTRADA' && !ubicacionDestino) {
-      return NextResponse.json(
-        { error: 'Ubicación destino es requerida para ENTRADA' },
-        { status: 400 }
-      );
+      return badRequest('Ubicación destino es requerida para ENTRADA');
     }
 
     if (tipo === 'TRASLADO' && (!ubicacionOrigen || !ubicacionDestino)) {
-      return NextResponse.json(
-        { error: 'Ubicación origen y destino son requeridas para TRASLADO' },
-        { status: 400 }
-      );
+      return badRequest('Ubicación origen y destino son requeridas para TRASLADO');
     }
 
     if (tipo === 'SALIDA' && !ubicacionOrigen) {
-      return NextResponse.json(
-        { error: 'Ubicación origen es requerida para SALIDA' },
-        { status: 400 }
-      );
+      return badRequest('Ubicación origen es requerida para SALIDA');
     }
 
-    // Ejecutar transacción
+    if (tipo === 'TRASLADO' && ubicacionOrigen === ubicacionDestino) {
+      return badRequest('Origen y destino deben ser diferentes para un traslado');
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Obtener o crear producto
       let producto;
+
       if (productoId) {
-        producto = await tx.producto.findUnique({ where: { id: productoId } });
+        producto = await tx.producto.findUnique({ where: { id: Number(productoId) } });
         if (!producto) {
           throw new Error('Producto no encontrado');
         }
       } else {
-        // Buscar por código o crear
         producto = await tx.producto.findUnique({ where: { codigo } });
         if (!producto) {
           producto = await tx.producto.create({
@@ -142,33 +161,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 2. Validar stock disponible para TRASLADO o SALIDA
-      if (tipo === 'TRASLADO' || tipo === 'SALIDA') {
-        const stockOrigen = await tx.stock.findUnique({
-          where: {
-            productoId_ubicacion: {
-              productoId: producto.id,
-              ubicacion: ubicacionOrigen,
-            },
-          },
-        });
-
-        if (!stockOrigen || stockOrigen.cantidad < cantidad) {
-          const disponible = stockOrigen?.cantidad || 0;
-          throw new Error(
-            `Stock insuficiente en ${ubicacionOrigen}. Disponible: ${disponible}, Solicitado: ${cantidad}`
-          );
-        }
-      }
-
-      // 3. Crear movimiento
       const movimiento = await tx.movimiento.create({
         data: {
           tipo: tipo as TipoMovimiento,
           cantidad,
-          ubicacionOrigen: ubicacionOrigen || null,
-          ubicacionDestino: ubicacionDestino || null,
-          vendedor,
+          ubicacionOrigen,
+          ubicacionDestino,
+          vendedor: session.vendedor,
           nota: nota || null,
           fotoUrl: fotoUrl || null,
           productoId: producto.id,
@@ -178,74 +177,30 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 4. Actualizar stock según tipo
-      if (tipo === 'ENTRADA') {
-        await tx.stock.upsert({
-          where: {
-            productoId_ubicacion: {
-              productoId: producto.id,
-              ubicacion: ubicacionDestino,
-            },
-          },
-          update: { cantidad: { increment: cantidad } },
-          create: {
-            productoId: producto.id,
-            ubicacion: ubicacionDestino,
-            cantidad,
-          },
-        });
-      } else if (tipo === 'TRASLADO') {
-        // Restar de origen
-        await tx.stock.update({
-          where: {
-            productoId_ubicacion: {
-              productoId: producto.id,
-              ubicacion: ubicacionOrigen,
-            },
-          },
-          data: { cantidad: { decrement: cantidad } },
-        });
-        // Sumar a destino
-        await tx.stock.upsert({
-          where: {
-            productoId_ubicacion: {
-              productoId: producto.id,
-              ubicacion: ubicacionDestino,
-            },
-          },
-          update: { cantidad: { increment: cantidad } },
-          create: {
-            productoId: producto.id,
-            ubicacion: ubicacionDestino,
-            cantidad,
-          },
-        });
-      } else if (tipo === 'SALIDA') {
-        await tx.stock.update({
-          where: {
-            productoId_ubicacion: {
-              productoId: producto.id,
-              ubicacion: ubicacionOrigen,
-            },
-          },
-          data: { cantidad: { decrement: cantidad } },
-        });
-      }
+      await applyStockOperations(
+        tx,
+        getStockOperations({
+          tipo: tipo as TipoMovimiento,
+          cantidad,
+          ubicacionOrigen,
+          ubicacionDestino,
+          productoId: producto.id,
+        })
+      );
 
       return movimiento;
     });
 
     return NextResponse.json({ movimiento: result }, { status: 201 });
   } catch (error: any) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error creating movimiento:', error);
 
-    // Errores de validación de negocio
-    if (error.message?.includes('Stock insuficiente') ||
-        error.message?.includes('Producto no encontrado')) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      );
+    if (error instanceof StockError || error.message?.includes('Producto no encontrado')) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json(

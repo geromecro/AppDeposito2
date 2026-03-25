@@ -14,6 +14,13 @@ interface StockOperation {
   delta: number;
 }
 
+export class StockError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StockError';
+  }
+}
+
 export function getStockOperations(mov: MovimientoData): StockOperation[] {
   const ops: StockOperation[] = [];
 
@@ -33,10 +40,27 @@ export function getReverseOperations(mov: MovimientoData): StockOperation[] {
   return getStockOperations(mov).map(op => ({ ...op, delta: -op.delta }));
 }
 
+export function mergeStockOperations(operations: StockOperation[]) {
+  const merged = new Map<string, StockOperation>();
+
+  for (const operation of operations) {
+    const key = `${operation.productoId}:${operation.ubicacion}`;
+    const current = merged.get(key);
+
+    if (current) {
+      current.delta += operation.delta;
+    } else {
+      merged.set(key, { ...operation });
+    }
+  }
+
+  return [...merged.values()].filter((operation) => operation.delta !== 0);
+}
+
 // Applies stock operations within a Prisma transaction
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function applyStockOperations(tx: any, operations: StockOperation[]) {
-  for (const op of operations) {
+  for (const op of mergeStockOperations(operations)) {
     if (op.delta > 0) {
       await tx.stock.upsert({
         where: {
@@ -53,15 +77,31 @@ export async function applyStockOperations(tx: any, operations: StockOperation[]
         },
       });
     } else if (op.delta < 0) {
-      await tx.stock.update({
+      const amount = Math.abs(op.delta);
+      const result = await tx.stock.updateMany({
         where: {
-          productoId_ubicacion: {
-            productoId: op.productoId,
-            ubicacion: op.ubicacion,
-          },
+          productoId: op.productoId,
+          ubicacion: op.ubicacion,
+          cantidad: { gte: amount },
         },
-        data: { cantidad: { decrement: Math.abs(op.delta) } },
+        data: { cantidad: { decrement: amount } },
       });
+
+      if (result.count === 0) {
+        const stock = await tx.stock.findUnique({
+          where: {
+            productoId_ubicacion: {
+              productoId: op.productoId,
+              ubicacion: op.ubicacion,
+            },
+          },
+        });
+
+        const disponible = stock?.cantidad ?? 0;
+        throw new StockError(
+          `Stock insuficiente en ${op.ubicacion}. Disponible: ${disponible}, se necesitan: ${amount}`
+        );
+      }
     }
   }
 }

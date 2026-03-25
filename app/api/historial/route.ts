@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
 
 // GET - Consultar historial de cambios
 export async function GET(request: NextRequest) {
   try {
+    requireSession(request);
     const searchParams = request.nextUrl.searchParams;
     const entidad = searchParams.get('entidad');
     const entidadId = searchParams.get('entidadId');
@@ -24,6 +26,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ historial });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error fetching historial:', error);
     return NextResponse.json({ error: 'Error al obtener historial' }, { status: 500 });
   }

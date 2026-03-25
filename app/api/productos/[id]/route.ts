@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
 
 // GET - Obtener un producto
 export async function GET(
@@ -7,6 +8,7 @@ export async function GET(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireSession(request);
     const params = await props.params;
     const id = parseInt(params.id);
 
@@ -23,6 +25,10 @@ export async function GET(
 
     return NextResponse.json({ producto });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error fetching producto:', error);
     return NextResponse.json(
       { error: 'Error al obtener producto' },
@@ -37,6 +43,7 @@ export async function PUT(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireSession(request);
     const params = await props.params;
     const id = parseInt(params.id);
     const body = await request.json();
@@ -48,6 +55,10 @@ export async function PUT(
 
     return NextResponse.json({ producto });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error updating producto:', error);
     return NextResponse.json(
       { error: 'Error al actualizar producto' },
@@ -62,6 +73,7 @@ export async function DELETE(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireSession(request);
     const params = await props.params;
     const id = parseInt(params.id);
 
@@ -71,6 +83,10 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error deleting producto:', error);
     return NextResponse.json(
       { error: 'Error al eliminar producto' },

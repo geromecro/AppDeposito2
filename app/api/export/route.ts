@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { TipoMovimiento } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
+import { parseLocalDateEnd, parseLocalDateStart } from '@/lib/date-utils';
 
 export async function GET(request: NextRequest) {
   try {
+    requireSession(request);
+
     const searchParams = request.nextUrl.searchParams;
     const desde = searchParams.get('desde');
     const hasta = searchParams.get('hasta');
@@ -16,14 +21,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calcular rango de fechas
-    const fechaDesde = new Date(desde);
-    fechaDesde.setHours(0, 0, 0, 0);
-    const fechaHasta = new Date(hasta);
-    fechaHasta.setHours(23, 59, 59, 999);
+    const fechaDesde = parseLocalDateStart(desde);
+    const fechaHasta = parseLocalDateEnd(hasta);
 
-    // Construir filtros
-    const whereClause: any = {
+    const whereClause: {
+      createdAt: { gte: Date; lte: Date };
+      vendedor?: string;
+      tipo?: TipoMovimiento;
+    } = {
       createdAt: {
         gte: fechaDesde,
         lte: fechaHasta,
@@ -35,10 +40,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (tipo) {
-      whereClause.tipo = tipo;
+      whereClause.tipo = tipo as TipoMovimiento;
     }
 
-    // Obtener movimientos con producto incluido
     const movimientos = await prisma.movimiento.findMany({
       where: whereClause,
       include: {
@@ -52,7 +56,6 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Generar CSV
     const headers = [
       'Fecha',
       'Hora',
@@ -66,29 +69,24 @@ export async function GET(request: NextRequest) {
       'Nota',
     ];
 
-    const rows = movimientos.map((m) => {
-      const fecha = new Date(m.createdAt);
+    const rows = movimientos.map((movimiento) => {
+      const fecha = new Date(movimiento.createdAt);
       return [
         `${fecha.getDate().toString().padStart(2, '0')}/${(fecha.getMonth() + 1).toString().padStart(2, '0')}/${fecha.getFullYear()}`,
         `${fecha.getHours().toString().padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`,
-        m.tipo,
-        `"${m.producto.codigo.replace(/"/g, '""')}"`,
-        `"${m.producto.descripcion.replace(/"/g, '""')}"`,
-        m.cantidad.toString(),
-        m.ubicacionOrigen || '-',
-        m.ubicacionDestino || '-',
-        `"${m.vendedor.replace(/"/g, '""')}"`,
-        m.nota ? `"${m.nota.replace(/"/g, '""')}"` : '',
+        movimiento.tipo,
+        `"${movimiento.producto.codigo.replace(/"/g, '""')}"`,
+        `"${movimiento.producto.descripcion.replace(/"/g, '""')}"`,
+        movimiento.cantidad.toString(),
+        movimiento.ubicacionOrigen || '-',
+        movimiento.ubicacionDestino || '-',
+        `"${movimiento.vendedor.replace(/"/g, '""')}"`,
+        movimiento.nota ? `"${movimiento.nota.replace(/"/g, '""')}"` : '',
       ];
     });
 
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-
-    // Agregar BOM para que Excel reconozca UTF-8
-    const BOM = '\uFEFF';
-    const csvWithBOM = BOM + csv;
-
-    // Nombre del archivo con rango de fechas
+    const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const csvWithBOM = '\uFEFF' + csv;
     const filename = `movimientos_${desde}_${hasta}.csv`;
 
     return new NextResponse(csvWithBOM, {
@@ -98,6 +96,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error exporting movimientos:', error);
     return NextResponse.json(
       { error: 'Error al exportar movimientos' },

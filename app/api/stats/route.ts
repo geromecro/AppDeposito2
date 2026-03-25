@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
+import { formatDateForInput, parseLocalDateEnd, parseLocalDateStart } from '@/lib/date-utils';
 
 export async function GET(request: NextRequest) {
   try {
+    requireSession(request);
+
     const searchParams = request.nextUrl.searchParams;
-    const fechaParam = searchParams.get('fecha'); // formato: YYYY-MM-DD
+    const fechaParam = searchParams.get('fecha');
+    const fechaBase = fechaParam || formatDateForInput(new Date());
+    const fechaInicio = parseLocalDateStart(fechaBase);
+    const fechaFin = parseLocalDateEnd(fechaBase);
 
-    // Calcular inicio y fin del día seleccionado
-    const fechaInicio = fechaParam ? new Date(fechaParam) : new Date();
-    fechaInicio.setHours(0, 0, 0, 0);
-    const fechaFin = new Date(fechaInicio);
-    fechaFin.setHours(23, 59, 59, 999);
-
-    // Ejecutar queries en paralelo para mejor rendimiento
     const [
       totalProductos,
       stockTotales,
@@ -20,23 +20,16 @@ export async function GET(request: NextRequest) {
       porVendedorDia,
       porTipoDia,
     ] = await Promise.all([
-      // Total de productos en catálogo
       prisma.producto.count(),
-
-      // Total de unidades por ubicación (agregado)
       prisma.stock.groupBy({
         by: ['ubicacion'],
         _sum: { cantidad: true },
       }),
-
-      // Movimientos del día
       prisma.movimiento.count({
         where: {
           createdAt: { gte: fechaInicio, lte: fechaFin },
         },
       }),
-
-      // Movimientos por vendedor del día
       prisma.movimiento.groupBy({
         by: ['vendedor'],
         where: {
@@ -45,8 +38,6 @@ export async function GET(request: NextRequest) {
         _count: { id: true },
         _sum: { cantidad: true },
       }),
-
-      // Movimientos por tipo del día
       prisma.movimiento.groupBy({
         by: ['tipo'],
         where: {
@@ -57,12 +48,12 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Calcular totales por ubicación
     const stockPorUbicacion: Record<string, number> = {};
     let totalUnidades = 0;
-    for (const s of stockTotales) {
-      const cantidad = s._sum?.cantidad || 0;
-      stockPorUbicacion[s.ubicacion] = cantidad;
+
+    for (const stock of stockTotales) {
+      const cantidad = stock._sum?.cantidad || 0;
+      stockPorUbicacion[stock.ubicacion] = cantidad;
       totalUnidades += cantidad;
     }
 
@@ -71,18 +62,22 @@ export async function GET(request: NextRequest) {
       totalUnidades,
       stockPorUbicacion,
       movimientosDia,
-      porVendedor: porVendedorDia.map((v) => ({
-        vendedor: v.vendedor,
-        registros: v._count?.id || 0,
-        unidades: v._sum?.cantidad || 0,
+      porVendedor: porVendedorDia.map((item) => ({
+        vendedor: item.vendedor,
+        registros: item._count?.id || 0,
+        unidades: item._sum?.cantidad || 0,
       })),
-      porTipo: porTipoDia.map((t) => ({
-        tipo: t.tipo,
-        registros: t._count?.id || 0,
-        unidades: t._sum?.cantidad || 0,
+      porTipo: porTipoDia.map((item) => ({
+        tipo: item.tipo,
+        registros: item._count?.id || 0,
+        unidades: item._sum?.cantidad || 0,
       })),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error fetching stats:', error);
     return NextResponse.json(
       { error: 'Error al obtener estadisticas' },

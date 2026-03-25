@@ -9,12 +9,16 @@ import { useToast } from '@/components/Toast';
 import { Input } from '@/components/Input';
 import { Card, CardBody } from '@/components/Card';
 import { UBICACIONES, TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TIPO_MOVIMIENTO_COLORS, TipoMovimiento } from '@/lib/constants';
+import { fetchClientSession } from '@/lib/client-session';
 
 interface ProductoExistente {
   id: number;
   codigo: string;
   descripcion: string;
   fotoUrl: string | null;
+  stockDeposito?: number;
+  stockLocal?: number;
+  total?: number;
 }
 
 interface StockInfo {
@@ -67,12 +71,28 @@ function NuevoMovimientoContent() {
   const [lastSavedProducto, setLastSavedProducto] = useState<ProductoExistente | null>(null);
 
   useEffect(() => {
-    const storedVendedor = localStorage.getItem('vendedor');
-    if (!storedVendedor) {
-      router.push('/');
-      return;
-    }
-    setVendedor(storedVendedor);
+    let active = true;
+
+    fetchClientSession()
+      .then((session) => {
+        if (!active) return;
+
+        if (!session.authenticated || !session.vendedor) {
+          router.replace('/');
+          return;
+        }
+
+        setVendedor(session.vendedor);
+      })
+      .catch(() => {
+        if (active) {
+          router.replace('/');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   // Precargar producto y tipo desde parámetros de URL
@@ -86,12 +106,12 @@ function NuevoMovimientoContent() {
 
     if (productoIdParam) {
       // Cargar el producto por ID
-      fetch(`/api/stock?search=`)
+      fetch(`/api/productos-catalogo/${productoIdParam}`)
         .then(res => res.json())
         .then(data => {
-          const producto = data.stock?.find((s: any) => s.producto.id === parseInt(productoIdParam));
+          const producto = data.producto;
           if (producto) {
-            setProductoSeleccionado(producto.producto);
+            setProductoSeleccionado(producto);
             setStockInfo({
               stockDeposito: producto.stockDeposito,
               stockLocal: producto.stockLocal,
@@ -112,13 +132,9 @@ function NuevoMovimientoContent() {
     const timer = setTimeout(async () => {
       setIsBuscando(true);
       try {
-        const res = await fetch(`/api/stock?search=${encodeURIComponent(busqueda)}`);
+        const res = await fetch(`/api/productos-catalogo?search=${encodeURIComponent(busqueda)}`);
         const data = await res.json();
-        setProductosEncontrados(data.stock?.map((s: any) => ({
-          ...s.producto,
-          stockDeposito: s.stockDeposito,
-          stockLocal: s.stockLocal,
-        })) || []);
+        setProductosEncontrados(data.productos || []);
       } catch (error) {
         console.error('Error buscando productos:', error);
       } finally {
@@ -134,9 +150,9 @@ function NuevoMovimientoContent() {
     if (productoSeleccionado) {
       const fetchStock = async () => {
         try {
-          const res = await fetch(`/api/stock?search=${encodeURIComponent(productoSeleccionado.codigo)}`);
+          const res = await fetch(`/api/productos-catalogo/${productoSeleccionado.id}`);
           const data = await res.json();
-          const stockItem = data.stock?.find((s: any) => s.producto.id === productoSeleccionado.id);
+          const stockItem = data.producto;
           if (stockItem) {
             setStockInfo({
               stockDeposito: stockItem.stockDeposito,
@@ -151,7 +167,7 @@ function NuevoMovimientoContent() {
     }
   }, [productoSeleccionado]);
 
-  const handleSelectProducto = (producto: any) => {
+  const handleSelectProducto = (producto: ProductoExistente) => {
     setProductoSeleccionado({
       id: producto.id,
       codigo: producto.codigo,
@@ -191,7 +207,6 @@ function NuevoMovimientoContent() {
 
       const formData = new FormData();
       formData.append('file', compressedFile);
-      formData.append('vendedor', vendedor || 'anon');
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -260,7 +275,6 @@ function NuevoMovimientoContent() {
       const body: any = {
         tipo,
         cantidad: parseInt(cantidad) || 1,
-        vendedor,
         nota: nota.trim() || null,
         fotoUrl: tipo === 'ENTRADA' ? fotoUrl : null,
       };
@@ -444,7 +458,7 @@ function NuevoMovimientoContent() {
                         )}
                         {productosEncontrados.length > 0 && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-primary-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-20">
-                            {productosEncontrados.map((p: any) => (
+                            {productosEncontrados.map((p) => (
                               <button
                                 key={p.id}
                                 type="button"
@@ -652,10 +666,10 @@ function NuevoMovimientoContent() {
                   setUbicacionDestino('');
                   setShowSuccessModal(false);
                   // Recargar stock del producto
-                  fetch(`/api/stock?search=${encodeURIComponent(lastSavedProducto.codigo)}`)
+                  fetch(`/api/productos-catalogo/${lastSavedProducto.id}`)
                     .then(res => res.json())
                     .then(data => {
-                      const stockItem = data.stock?.find((s: any) => s.producto.id === lastSavedProducto.id);
+                      const stockItem = data.producto;
                       if (stockItem) {
                         setStockInfo({
                           stockDeposito: stockItem.stockDeposito,

@@ -40,10 +40,10 @@ export function EditMovimientoModal({ movimiento, onClose, onSaved }: EditMovimi
 
   // Fetch stock info for reference
   useEffect(() => {
-    fetch(`/api/stock?search=${encodeURIComponent(movimiento.producto.codigo)}`)
+    fetch(`/api/productos-catalogo/${movimiento.producto.id}`)
       .then(res => res.json())
       .then(data => {
-        const item = data.stock?.find((s: any) => s.producto.id === movimiento.producto.id);
+        const item = data.producto;
         if (item) {
           setStockInfo({ Deposito: item.stockDeposito, Local: item.stockLocal });
         }
@@ -58,9 +58,6 @@ export function EditMovimientoModal({ movimiento, onClose, onSaved }: EditMovimi
       return;
     }
 
-    const vendedor = localStorage.getItem('vendedor');
-    if (!vendedor) return;
-
     setIsLoading(true);
     try {
       const res = await fetch(`/api/movimientos/${movimiento.id}`, {
@@ -71,7 +68,6 @@ export function EditMovimientoModal({ movimiento, onClose, onSaved }: EditMovimi
           ubicacionOrigen: ubicacionOrigen || null,
           ubicacionDestino: ubicacionDestino || null,
           nota: nota || null,
-          vendedor,
         }),
       });
 
@@ -177,7 +173,7 @@ export function EditMovimientoModal({ movimiento, onClose, onSaved }: EditMovimi
                   onChange={(e) => setUbicacionDestino(e.target.value)}
                   className="w-full px-4 py-3 text-sm bg-white border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent transition-all duration-200"
                 >
-                  {UBICACIONES.map((ubi) => (
+                  {UBICACIONES.filter((ubi) => movimiento.tipo !== 'TRASLADO' || ubi !== ubicacionOrigen).map((ubi) => (
                     <option key={ubi} value={ubi}>{ubi}</option>
                   ))}
                 </select>

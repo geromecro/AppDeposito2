@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AuthError, requireSession } from '@/lib/auth';
 
 // GET - Obtener stock consolidado
 export async function GET(request: NextRequest) {
   try {
+    requireSession(request);
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search') || '';
     const ubicacion = searchParams.get('ubicacion') || '';
@@ -65,6 +67,10 @@ export async function GET(request: NextRequest) {
       totales,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error fetching stock:', error);
     return NextResponse.json(
       { error: 'Error al obtener stock' },

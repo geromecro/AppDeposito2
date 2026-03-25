@@ -1,26 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { buildEditChanges } from '@/lib/audit-utils';
+import { AuthError, requireSession } from '@/lib/auth';
+
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  try {
+    requireSession(request);
+    const params = await props.params;
+    const id = parseInt(params.id, 10);
+
+    const producto = await prisma.producto.findUnique({
+      where: { id },
+      include: { stocks: true },
+    });
+
+    if (!producto) {
+      return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
+    }
+
+    const stockDeposito = producto.stocks.find((stock) => stock.ubicacion === 'Deposito')?.cantidad || 0;
+    const stockLocal = producto.stocks.find((stock) => stock.ubicacion === 'Local')?.cantidad || 0;
+
+    return NextResponse.json({
+      producto: {
+        id: producto.id,
+        codigo: producto.codigo,
+        descripcion: producto.descripcion,
+        fotoUrl: producto.fotoUrl,
+        stockDeposito,
+        stockLocal,
+        total: stockDeposito + stockLocal,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    console.error('Error fetching producto:', error);
+    return NextResponse.json({ error: 'Error al obtener producto' }, { status: 500 });
+  }
+}
 
 // PUT - Editar producto del catálogo
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {
+    const session = requireSession(request);
     const params = await props.params;
-    const id = parseInt(params.id);
+    const id = parseInt(params.id, 10);
     const body = await request.json();
-    const { codigo, descripcion, fotoUrl, vendedor } = body;
+    const { codigo, descripcion, fotoUrl } = body;
 
-    if (!vendedor) {
-      return NextResponse.json({ error: 'Vendedor es requerido' }, { status: 400 });
-    }
-
-    // Fetch producto actual
     const old = await prisma.producto.findUnique({ where: { id } });
     if (!old) {
       return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
     }
 
-    // Preparar nuevos valores
     const newData: { codigo?: string; descripcion?: string; fotoUrl?: string | null } = {};
     if (codigo !== undefined) newData.codigo = codigo;
     if (descripcion !== undefined) newData.descripcion = descripcion;
@@ -30,7 +65,6 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       return NextResponse.json({ error: 'No hay campos para actualizar' }, { status: 400 });
     }
 
-    // Validar unicidad de código si cambió
     if (newData.codigo && newData.codigo !== old.codigo) {
       const existing = await prisma.producto.findUnique({ where: { codigo: newData.codigo } });
       if (existing) {
@@ -38,7 +72,6 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       }
     }
 
-    // Actualizar y registrar auditoría en transacción
     const updated = await prisma.$transaction(async (tx) => {
       const result = await tx.producto.update({
         where: { id },
@@ -56,7 +89,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
             entidad: 'Producto',
             entidadId: id,
             accion: 'EDITAR',
-            vendedor,
+            vendedor: session.vendedor,
             cambios,
           },
         });
@@ -67,6 +100,10 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
 
     return NextResponse.json({ producto: updated });
   } catch (error: any) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     console.error('Error updating producto:', error);
 
     if (error.code === 'P2002') {
