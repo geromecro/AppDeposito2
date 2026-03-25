@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       if (ubicacion === 'Deposito') return item.stockDeposito > 0;
       if (ubicacion === 'Local') return item.stockLocal > 0;
       if (sinStock) return item.total === 0;
-      return true;
+      return item.total > 0;
     });
 
     // Calcular totales generales
