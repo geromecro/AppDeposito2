@@ -6,7 +6,10 @@ import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { SearchBar } from '@/components/SearchBar';
 import { StockCard } from '@/components/StockCard';
-import { UBICACIONES } from '@/lib/constants';
+import { EditMovimientoModal } from '@/components/EditMovimientoModal';
+import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
+import { HistorialList } from '@/components/HistorialList';
+import { UBICACIONES, TIPO_MOVIMIENTO_LABELS } from '@/lib/constants';
 
 interface StockItem {
   producto: {
@@ -34,7 +37,14 @@ interface Movimiento {
   ubicacionOrigen: string | null;
   ubicacionDestino: string | null;
   vendedor: string;
+  nota: string | null;
   createdAt: string;
+  producto?: {
+    id: number;
+    codigo: string;
+    descripcion: string;
+    fotoUrl: string | null;
+  };
 }
 
 export default function InventarioPage() {
@@ -55,6 +65,18 @@ export default function InventarioPage() {
   const [productMovimientos, setProductMovimientos] = useState<Movimiento[]>([]);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
   const [cachedMovimientos, setCachedMovimientos] = useState<Record<number, Movimiento[]>>({});
+
+  // Estados para edición de producto
+  const [isEditingProduct, setIsEditingProduct] = useState(false);
+  const [editCodigo, setEditCodigo] = useState('');
+  const [editDescripcion, setEditDescripcion] = useState('');
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [productEditError, setProductEditError] = useState('');
+
+  // Estados para editar/eliminar movimientos desde el modal
+  const [editingMovimiento, setEditingMovimiento] = useState<(Movimiento & { producto: { id: number; codigo: string; descripcion: string; fotoUrl: string | null } }) | null>(null);
+  const [deletingMovimiento, setDeletingMovimiento] = useState<Movimiento | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -105,6 +127,102 @@ export default function InventarioPage() {
   const handleViewProduct = (item: StockItem) => {
     setViewingProduct(item);
     setProductMovimientos([]);
+    setIsEditingProduct(false);
+    setProductEditError('');
+  };
+
+  const handleStartEditProduct = () => {
+    if (!viewingProduct) return;
+    setEditCodigo(viewingProduct.producto.codigo);
+    setEditDescripcion(viewingProduct.producto.descripcion);
+    setIsEditingProduct(true);
+    setProductEditError('');
+  };
+
+  const handleSaveProduct = async () => {
+    if (!viewingProduct || !vendedor) return;
+    setIsSavingProduct(true);
+    setProductEditError('');
+    try {
+      const res = await fetch(`/api/productos-catalogo/${viewingProduct.producto.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo: editCodigo, descripcion: editDescripcion, vendedor }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProductEditError(data.error || 'Error al guardar');
+        return;
+      }
+      // Update local state
+      setViewingProduct({
+        ...viewingProduct,
+        producto: { ...viewingProduct.producto, codigo: editCodigo, descripcion: editDescripcion },
+      });
+      setIsEditingProduct(false);
+      // Invalidate caches and refresh
+      setCachedMovimientos({});
+      fetchStock();
+    } catch {
+      setProductEditError('Error de conexión');
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  const handleDeleteMovimientoConfirm = async () => {
+    if (!deletingMovimiento || !vendedor) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/movimientos/${deletingMovimiento.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedor }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Error al eliminar');
+        return;
+      }
+      setDeletingMovimiento(null);
+      // Refresh data
+      setCachedMovimientos({});
+      fetchStock();
+      if (viewingProduct) {
+        setLoadingMovimientos(true);
+        fetch(`/api/movimientos?productoId=${viewingProduct.producto.id}&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            const movimientos = data.movimientos || [];
+            setProductMovimientos(movimientos);
+            setCachedMovimientos(prev => ({ ...prev, [viewingProduct.producto.id]: movimientos }));
+          })
+          .catch(console.error)
+          .finally(() => setLoadingMovimientos(false));
+      }
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleMovimientoSaved = () => {
+    setEditingMovimiento(null);
+    setCachedMovimientos({});
+    fetchStock();
+    if (viewingProduct) {
+      setLoadingMovimientos(true);
+      fetch(`/api/movimientos?productoId=${viewingProduct.producto.id}&limit=5`)
+        .then(res => res.json())
+        .then(data => {
+          const movimientos = data.movimientos || [];
+          setProductMovimientos(movimientos);
+          setCachedMovimientos(prev => ({ ...prev, [viewingProduct.producto.id]: movimientos }));
+        })
+        .catch(console.error)
+        .finally(() => setLoadingMovimientos(false));
+    }
   };
 
   // Cargar movimientos cuando se abre el modal (con cache)
@@ -403,11 +521,67 @@ export default function InventarioPage() {
             )}
 
             {/* Info */}
-            <div className="p-5">
-              <h2 className="font-code text-2xl font-bold text-surface-900 mb-1">
-                {viewingProduct.producto.codigo}
-              </h2>
-              <p className="text-surface-600 mb-5">{viewingProduct.producto.descripcion}</p>
+            <div className="p-5 overflow-y-auto max-h-[calc(90vh-14rem)]">
+              {/* Product info - view/edit mode */}
+              {isEditingProduct ? (
+                <div className="mb-5 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-surface-500 mb-1">Código</label>
+                    <input
+                      type="text"
+                      value={editCodigo}
+                      onChange={(e) => setEditCodigo(e.target.value)}
+                      className="w-full px-3 py-2 text-lg font-code font-bold bg-white border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-surface-500 mb-1">Descripción</label>
+                    <input
+                      type="text"
+                      value={editDescripcion}
+                      onChange={(e) => setEditDescripcion(e.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-white border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent"
+                    />
+                  </div>
+                  {productEditError && (
+                    <p className="text-xs text-error-600">{productEditError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsEditingProduct(false)}
+                      disabled={isSavingProduct}
+                      className="flex-1 px-3 py-2 text-sm font-medium bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleSaveProduct}
+                      disabled={isSavingProduct}
+                      className="flex-1 px-3 py-2 text-sm font-medium bg-surface-900 text-white rounded-xl hover:bg-surface-800 transition-colors disabled:opacity-50"
+                    >
+                      {isSavingProduct ? 'Guardando...' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between mb-5">
+                  <div className="flex-1">
+                    <h2 className="font-code text-2xl font-bold text-surface-900 mb-1">
+                      {viewingProduct.producto.codigo}
+                    </h2>
+                    <p className="text-surface-600">{viewingProduct.producto.descripcion}</p>
+                  </div>
+                  <button
+                    onClick={handleStartEditProduct}
+                    className="ml-3 p-2 text-surface-400 hover:text-transfer-600 hover:bg-transfer-50 rounded-lg transition-colors"
+                    title="Editar producto"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
               {/* Stock grid */}
               <div className="grid grid-cols-3 gap-3 mb-5">
@@ -465,9 +639,30 @@ export default function InventarioPage() {
                            mov.tipo === 'SALIDA' ? `← ${mov.ubicacionOrigen}` :
                            `${mov.ubicacionOrigen} → ${mov.ubicacionDestino}`}
                         </span>
-                        <span className="text-surface-400 text-xs">
+                        <span className="text-surface-400 text-xs mr-1">
                           {new Date(mov.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
                         </span>
+                        <button
+                          onClick={() => setEditingMovimiento({
+                            ...mov,
+                            producto: viewingProduct!.producto,
+                          })}
+                          className="p-1 text-surface-300 hover:text-transfer-600 hover:bg-transfer-50 rounded transition-colors"
+                          title="Editar"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setDeletingMovimiento(mov)}
+                          className="p-1 text-surface-300 hover:text-error-600 hover:bg-error-50 rounded transition-colors"
+                          title="Eliminar"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -518,6 +713,11 @@ export default function InventarioPage() {
                 </Link>
               </div>
 
+              {/* Historial de cambios */}
+              <div className="mb-4">
+                <HistorialList entidad="Producto" entidadId={viewingProduct.producto.id} />
+              </div>
+
               <button
                 onClick={() => setViewingProduct(null)}
                 className="
@@ -531,6 +731,27 @@ export default function InventarioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit movimiento modal (from product detail) */}
+      {editingMovimiento && (
+        <EditMovimientoModal
+          movimiento={editingMovimiento}
+          onClose={() => setEditingMovimiento(null)}
+          onSaved={handleMovimientoSaved}
+        />
+      )}
+
+      {/* Delete movimiento confirmation (from product detail) */}
+      {deletingMovimiento && (
+        <ConfirmDeleteModal
+          title="Eliminar movimiento"
+          message="Esta acción revertirá el efecto en el stock y no se puede deshacer."
+          detail={`${viewingProduct?.producto.codigo || ''} — ${TIPO_MOVIMIENTO_LABELS[deletingMovimiento.tipo]} x${deletingMovimiento.cantidad}`}
+          onConfirm={handleDeleteMovimientoConfirm}
+          onCancel={() => setDeletingMovimiento(null)}
+          isLoading={isDeleting}
+        />
       )}
 
       {/* Fullscreen image lightbox */}

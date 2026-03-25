@@ -75,3 +75,22 @@ model Stock {
   @@unique([productoId, ubicacion])
   @@index([ubicacion])
 }
+
+enum AccionHistorial {
+  EDITAR
+  ELIMINAR
+}
+
+model HistorialCambio {
+  id        Int              @id @default(autoincrement())
+  entidad   String           // "Movimiento" o "Producto"
+  entidadId Int
+  accion    AccionHistorial
+  vendedor  String
+  cambios   Json
+  createdAt DateTime         @default(now())
+
+  @@index([entidad, entidadId])
+  @@index([createdAt])
+  @@index([vendedor])
+}

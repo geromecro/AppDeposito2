@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { MovimientoCard } from '@/components/MovimientoCard';
+import { EditMovimientoModal } from '@/components/EditMovimientoModal';
+import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { TIPOS_MOVIMIENTO, TIPO_MOVIMIENTO_LABELS, TipoMovimiento, VENDEDORES } from '@/lib/constants';
 
 interface Movimiento {
@@ -48,6 +50,9 @@ function MovimientosContent() {
   const [fechaHasta, setFechaHasta] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
+  const [editingMovimiento, setEditingMovimiento] = useState<Movimiento | null>(null);
+  const [deletingMovimiento, setDeletingMovimiento] = useState<Movimiento | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const storedVendedor = localStorage.getItem('vendedor');
@@ -96,6 +101,29 @@ function MovimientosContent() {
   const handleLogout = () => {
     localStorage.removeItem('vendedor');
     router.push('/');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingMovimiento || !vendedor) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/movimientos/${deletingMovimiento.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedor }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Error al eliminar');
+        return;
+      }
+      setDeletingMovimiento(null);
+      fetchMovimientos();
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const tipoButtonStyles = {
@@ -304,6 +332,8 @@ function MovimientosContent() {
                 nota={mov.nota}
                 createdAt={mov.createdAt}
                 producto={mov.producto}
+                onEdit={() => setEditingMovimiento(mov)}
+                onDelete={() => setDeletingMovimiento(mov)}
               />
             </div>
           ))
@@ -346,6 +376,30 @@ function MovimientosContent() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </Link>
+
+      {/* Edit modal */}
+      {editingMovimiento && (
+        <EditMovimientoModal
+          movimiento={editingMovimiento}
+          onClose={() => setEditingMovimiento(null)}
+          onSaved={() => {
+            setEditingMovimiento(null);
+            fetchMovimientos();
+          }}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {deletingMovimiento && (
+        <ConfirmDeleteModal
+          title="Eliminar movimiento"
+          message="Esta acción revertirá el efecto en el stock y no se puede deshacer."
+          detail={`${deletingMovimiento.producto.codigo} — ${TIPO_MOVIMIENTO_LABELS[deletingMovimiento.tipo]} x${deletingMovimiento.cantidad}`}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeletingMovimiento(null)}
+          isLoading={isDeleting}
+        />
+      )}
     </main>
   );
 }
