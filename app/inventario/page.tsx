@@ -73,6 +73,8 @@ export default function InventarioPage() {
   const [editDescripcion, setEditDescripcion] = useState('');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [productEditError, setProductEditError] = useState('');
+  const [deletingProduct, setDeletingProduct] = useState<StockItem | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
 
   // Estados para editar/eliminar movimientos desde el modal
   const [editingMovimiento, setEditingMovimiento] = useState<(Movimiento & { producto: { id: number; codigo: string; descripcion: string; fotoUrl: string | null } }) | null>(null);
@@ -219,6 +221,33 @@ export default function InventarioPage() {
       alert('Error de conexión');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteProductConfirm = async () => {
+    if (!deletingProduct) return;
+
+    setIsDeletingProduct(true);
+    try {
+      const res = await fetch(`/api/productos-catalogo/${deletingProduct.producto.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Error al eliminar producto');
+        return;
+      }
+
+      setDeletingProduct(null);
+      setViewingProduct(null);
+      setCachedMovimientos({});
+      setProductMovimientos([]);
+      fetchStock();
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -734,6 +763,19 @@ export default function InventarioPage() {
                 <HistorialList entidad="Producto" entidadId={viewingProduct.producto.id} />
               </div>
 
+              {!isEditingProduct && viewingProduct.total === 0 && productMovimientos.length === 0 && (
+                <button
+                  onClick={() => setDeletingProduct(viewingProduct)}
+                  className="
+                    w-full px-4 py-3 rounded-xl font-semibold mb-3
+                    bg-error-50 text-error-700 border border-error-200
+                    hover:bg-error-100 transition-colors press-effect
+                  "
+                >
+                  Eliminar producto vacío
+                </button>
+              )}
+
               <button
                 onClick={() => setViewingProduct(null)}
                 className="
@@ -767,6 +809,17 @@ export default function InventarioPage() {
           onConfirm={handleDeleteMovimientoConfirm}
           onCancel={() => setDeletingMovimiento(null)}
           isLoading={isDeleting}
+        />
+      )}
+
+      {deletingProduct && (
+        <ConfirmDeleteModal
+          title="Eliminar producto"
+          message="Solo se eliminará si no tiene movimientos y su stock total es 0."
+          detail={`${deletingProduct.producto.codigo} — ${deletingProduct.producto.descripcion}`}
+          onConfirm={handleDeleteProductConfirm}
+          onCancel={() => setDeletingProduct(null)}
+          isLoading={isDeletingProduct}
         />
       )}
 

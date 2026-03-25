@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { buildEditChanges } from '@/lib/audit-utils';
+import { buildDeleteSnapshot, buildEditChanges } from '@/lib/audit-utils';
 import { AuthError, requireSession } from '@/lib/auth';
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -111,5 +111,75 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     }
 
     return NextResponse.json({ error: 'Error al editar producto' }, { status: 500 });
+  }
+}
+
+// DELETE - Eliminar producto del catálogo si no tiene movimientos y no tiene stock
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  try {
+    const session = requireSession(request);
+    const params = await props.params;
+    const id = parseInt(params.id, 10);
+
+    await prisma.$transaction(async (tx) => {
+      const producto = await tx.producto.findUnique({
+        where: { id },
+        include: {
+          stocks: true,
+          movimientos: {
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+
+      if (!producto) {
+        throw new Error('Producto no encontrado');
+      }
+
+      if (producto.movimientos.length > 0) {
+        throw new Error('No se puede eliminar un producto con movimientos registrados');
+      }
+
+      const stockNoCero = producto.stocks.find((stock) => stock.cantidad !== 0);
+      if (stockNoCero) {
+        throw new Error('No se puede eliminar un producto con stock disponible');
+      }
+
+      await tx.historialCambio.create({
+        data: {
+          entidad: 'Producto',
+          entidadId: id,
+          accion: 'ELIMINAR',
+          vendedor: session.vendedor,
+          cambios: buildDeleteSnapshot(producto),
+        },
+      });
+
+      await tx.stock.deleteMany({
+        where: { productoId: id },
+      });
+
+      await tx.producto.delete({
+        where: { id },
+      });
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    console.error('Error deleting producto:', error);
+
+    if (
+      error.message?.includes('Producto no encontrado') ||
+      error.message?.includes('No se puede eliminar')
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: 'Error al eliminar producto' }, { status: 500 });
   }
 }
