@@ -81,6 +81,21 @@ enum AccionHistorial {
   ELIMINAR
 }
 
+enum ClasificacionRelevamiento {
+  CON_POTENCIAL
+  SIN_SALIDA_HISTORICA
+  PARA_REVISAR
+  DESCARTAR
+}
+
+enum EstadoRelevamiento {
+  RELEVADO
+  PENDIENTE_REVISION
+  PENDIENTE_STOCK
+  DUPLICADO_POTENCIAL
+  DESCARTADO
+}
+
 model HistorialCambio {
   id        Int              @id @default(autoincrement())
   entidad   String           // "Movimiento" o "Producto"
@@ -93,4 +108,24 @@ model HistorialCambio {
   @@index([entidad, entidadId])
   @@index([createdAt])
   @@index([vendedor])
+}
+
+model ProductoRelevado {
+  id             Int                       @id @default(autoincrement())
+  codigo         String?
+  codigoProvisorio String                  @unique
+  descripcion    String
+  fotoUrl        String?
+  ubicacionFisica String
+  clasificacion  ClasificacionRelevamiento
+  estado         EstadoRelevamiento       @default(PENDIENTE_REVISION)
+  observacion    String?
+  relevadoPor    String
+  relevadoAt     DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([codigo])
+  @@index([clasificacion])
+  @@index([estado])
+  @@index([relevadoAt])
 }
