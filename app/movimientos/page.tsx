@@ -43,6 +43,7 @@ function MovimientosContent() {
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [filtersReady, setFiltersReady] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
   const [editingMovimiento, setEditingMovimiento] = useState<Movimiento | null>(null);
@@ -62,6 +63,7 @@ function MovimientosContent() {
     setFiltroProductoId(productoIdParam);
     setFechaDesde(params.get('fechaDesde') || '');
     setFechaHasta(params.get('fechaHasta') || '');
+    setShowAdvancedFilters(Boolean(vendedorValido || params.get('fechaDesde') || params.get('fechaHasta')));
     setFiltersReady(true);
   }, []);
 
@@ -202,12 +204,21 @@ function MovimientosContent() {
     [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta]
   );
 
+  const advancedFiltersSummary = useMemo(() => {
+    const parts: string[] = [];
+
+    if (filtroVendedor) parts.push(filtroVendedor);
+    if (fechaDesde || fechaHasta) parts.push('Rango de fechas');
+
+    return parts.join(' · ');
+  }, [filtroVendedor, fechaDesde, fechaHasta]);
+
   if (!vendedor) {
     return null;
   }
 
   return (
-    <main className="min-h-screen bg-surface-100 pb-24">
+    <main className="min-h-screen bg-surface-100 pb-32">
       {/* Header */}
       <header className="sticky top-0 glass border-b border-surface-200 z-10">
         <div className="px-4 py-4">
@@ -288,72 +299,93 @@ function MovimientosContent() {
             ))}
           </div>
 
-          {/* Vendor filter */}
-          <div className="mb-4">
-            <select
-              value={filtroVendedor}
-              onChange={(e) => setFiltroVendedor(e.target.value)}
-              className="
-                w-full px-4 py-3 text-sm
-                bg-white border border-surface-200 rounded-xl
-                text-surface-900
-                focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
-                transition-all duration-200
-              "
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-xl border border-surface-200 bg-white px-4 py-2.5 text-sm font-medium text-surface-700 transition-colors hover:border-surface-300"
             >
-              <option value="">Todos los vendedores</option>
-              {VENDEDORES.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Date filters */}
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="block text-xs text-surface-500 mb-1 font-medium">Desde</label>
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                className="
-                  w-full px-3 py-2.5 text-sm
-                  bg-white border border-surface-200 rounded-xl
-                  text-surface-900
-                  focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
-                  transition-all duration-200
-                "
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-surface-500 mb-1 font-medium">Hasta</label>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                className="
-                  w-full px-3 py-2.5 text-sm
-                  bg-white border border-surface-200 rounded-xl
-                  text-surface-900
-                  focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
-                  transition-all duration-200
-                "
-              />
-            </div>
-            {(fechaDesde || fechaHasta) && (
-              <button
-                type="button"
-                onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
-                className="
-                  px-3 py-2.5 text-sm font-medium
-                  text-surface-600 hover:bg-surface-200
-                  rounded-xl transition-colors
-                "
-              >
-                Limpiar
-              </button>
+              <svg className={`h-4 w-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              {showAdvancedFilters ? 'Ocultar filtros avanzados' : 'Más filtros'}
+            </button>
+            {!showAdvancedFilters && advancedFiltersSummary && (
+              <p className="text-right text-xs text-surface-500">{advancedFiltersSummary}</p>
             )}
           </div>
+
+          {showAdvancedFilters && (
+            <div className="rounded-2xl border border-surface-200 bg-white p-3 sm:p-4">
+              {/* Vendor filter */}
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs font-medium text-surface-500">Vendedor</label>
+                <select
+                  value={filtroVendedor}
+                  onChange={(e) => setFiltroVendedor(e.target.value)}
+                  className="
+                    w-full px-4 py-3 text-sm
+                    bg-white border border-surface-200 rounded-xl
+                    text-surface-900
+                    focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
+                    transition-all duration-200
+                  "
+                >
+                  <option value="">Todos los vendedores</option>
+                  {VENDEDORES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date filters */}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs text-surface-500 mb-1 font-medium">Desde</label>
+                  <input
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                    className="
+                      w-full px-3 py-2.5 text-sm
+                      bg-white border border-surface-200 rounded-xl
+                      text-surface-900
+                      focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
+                      transition-all duration-200
+                    "
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-surface-500 mb-1 font-medium">Hasta</label>
+                  <input
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                    className="
+                      w-full px-3 py-2.5 text-sm
+                      bg-white border border-surface-200 rounded-xl
+                      text-surface-900
+                      focus:outline-none focus:ring-2 focus:ring-surface-900 focus:border-transparent
+                      transition-all duration-200
+                    "
+                  />
+                </div>
+                {(fechaDesde || fechaHasta) && (
+                  <button
+                    type="button"
+                    onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
+                    className="
+                      px-3 py-2.5 text-sm font-medium
+                      text-surface-600 hover:bg-surface-200
+                      rounded-xl transition-colors
+                    "
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 flex items-center justify-between gap-3 text-sm">
             <p className="text-surface-500">
@@ -373,7 +405,7 @@ function MovimientosContent() {
       </header>
 
       {/* Movements list */}
-      <div className="p-4 space-y-3">
+      <div className="p-4 pb-40 space-y-3">
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(5)].map((_, i) => (

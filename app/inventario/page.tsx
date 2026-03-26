@@ -371,7 +371,7 @@ export default function InventarioPage() {
   }
 
   return (
-    <main className="min-h-screen bg-surface-100 pb-24">
+    <main className="min-h-screen bg-surface-100 pb-32">
       {/* Header */}
       <header className="sticky top-0 glass border-b border-surface-200 z-10">
         <div className="px-4 py-4">
@@ -523,7 +523,7 @@ export default function InventarioPage() {
       </header>
 
       {/* Stock list */}
-      <div className="p-4 space-y-3">
+      <div className="p-4 pb-40 space-y-3">
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
