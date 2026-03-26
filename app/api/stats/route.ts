@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
     const fechaBase = fechaParam || formatDateForInput(new Date());
     const fechaInicio = parseLocalDateStart(fechaBase);
     const fechaFin = parseLocalDateEnd(fechaBase);
+    const fechaActividadInicio = new Date(fechaInicio);
+    fechaActividadInicio.setDate(fechaActividadInicio.getDate() - 29);
 
     const [
       totalProductos,
@@ -19,6 +21,8 @@ export async function GET(request: NextRequest) {
       movimientosDia,
       porVendedorDia,
       porTipoDia,
+      productosActivos30d,
+      ultimoMovimiento,
     ] = await Promise.all([
       prisma.producto.count(),
       prisma.stock.groupBy({
@@ -46,6 +50,26 @@ export async function GET(request: NextRequest) {
         _count: { id: true },
         _sum: { cantidad: true },
       }),
+      prisma.movimiento.findMany({
+        where: {
+          createdAt: { gte: fechaActividadInicio, lte: fechaFin },
+        },
+        distinct: ['productoId'],
+        select: { productoId: true },
+      }),
+      prisma.movimiento.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          createdAt: true,
+          tipo: true,
+          vendedor: true,
+          producto: {
+            select: {
+              codigo: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const stockPorUbicacion: Record<string, number> = {};
@@ -62,6 +86,17 @@ export async function GET(request: NextRequest) {
       totalUnidades,
       stockPorUbicacion,
       movimientosDia,
+      salidasDia:
+        porTipoDia.find((item) => item.tipo === 'SALIDA')?._count?.id || 0,
+      productosActivos30d: productosActivos30d.length,
+      ultimoMovimiento: ultimoMovimiento
+        ? {
+            createdAt: ultimoMovimiento.createdAt,
+            tipo: ultimoMovimiento.tipo,
+            vendedor: ultimoMovimiento.vendedor,
+            productoCodigo: ultimoMovimiento.producto.codigo,
+          }
+        : null,
       porVendedor: porVendedorDia.map((item) => ({
         vendedor: item.vendedor,
         registros: item._count?.id || 0,
