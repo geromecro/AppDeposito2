@@ -1,24 +1,35 @@
 'use client';
 
-import { ChangeEvent } from 'react';
+import { ChangeEvent, useId } from 'react';
 
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  label?: string;
+  ariaLabel?: string;
 }
 
 export function SearchBar({
   value,
   onChange,
   placeholder = 'Buscar...',
+  label,
+  ariaLabel,
 }: SearchBarProps) {
+  const inputId = useId();
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
   };
 
   return (
     <div className="relative">
+      {label && (
+        <label htmlFor={inputId} className="sr-only">
+          {label}
+        </label>
+      )}
       <svg
         className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
         fill="none"
@@ -33,10 +44,12 @@ export function SearchBar({
         />
       </svg>
       <input
+        id={inputId}
         type="text"
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
+        aria-label={ariaLabel || label || placeholder}
         className="
           w-full pl-12 pr-12 py-3.5 text-base
           bg-surface-100 border-0 rounded-xl
@@ -47,7 +60,9 @@ export function SearchBar({
       />
       {value && (
         <button
+          type="button"
           onClick={() => onChange('')}
+          aria-label="Limpiar búsqueda"
           className="
             absolute right-3 top-1/2 -translate-y-1/2
             w-8 h-8 flex items-center justify-center

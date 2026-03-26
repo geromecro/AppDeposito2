@@ -341,7 +341,7 @@ function NuevoMovimientoContent() {
       {/* Header */}
       <header className="sticky top-0 bg-white border-b border-primary-200 z-10">
         <div className="px-4 py-3 flex items-center gap-3">
-          <Link href="/inventario" className="text-primary-600">
+          <Link href="/inventario" className="text-primary-600" aria-label="Volver al inventario">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>

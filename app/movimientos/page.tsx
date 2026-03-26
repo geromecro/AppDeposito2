@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
+import { useToast } from '@/components/Toast';
 import { MovimientoCard } from '@/components/MovimientoCard';
 import { EditMovimientoModal } from '@/components/EditMovimientoModal';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
@@ -28,20 +29,12 @@ interface Movimiento {
 }
 
 export default function MovimientosPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-surface-100">
-        <div className="w-8 h-8 border-2 border-surface-300 border-t-surface-700 rounded-full animate-spin" />
-      </div>
-    }>
-      <MovimientosContent />
-    </Suspense>
-  );
+  return <MovimientosContent />;
 }
 
 function MovimientosContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const { error: showErrorToast, success: showSuccessToast } = useToast();
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | ''>('');
   const [filtroVendedor, setFiltroVendedor] = useState('');
@@ -49,11 +42,28 @@ function MovimientosContent() {
   const [productoNombre, setProductoNombre] = useState<string | null>(null);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [filtersReady, setFiltersReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
   const [editingMovimiento, setEditingMovimiento] = useState<Movimiento | null>(null);
   const [deletingMovimiento, setDeletingMovimiento] = useState<Movimiento | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tipoParam = params.get('tipo');
+    const vendedorParam = params.get('vendedor') || '';
+    const productoIdParam = params.get('productoId');
+    const tipoValido = TIPOS_MOVIMIENTO.find((tipo) => tipo === tipoParam) || '';
+    const vendedorValido = VENDEDORES.find((vendedorActual) => vendedorActual === vendedorParam) || '';
+
+    setFiltroTipo(tipoValido);
+    setFiltroVendedor(vendedorValido);
+    setFiltroProductoId(productoIdParam);
+    setFechaDesde(params.get('fechaDesde') || '');
+    setFechaHasta(params.get('fechaHasta') || '');
+    setFiltersReady(true);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -68,10 +78,6 @@ function MovimientosContent() {
         }
 
         setVendedor(session.vendedor);
-        const productoIdParam = searchParams.get('productoId');
-        if (productoIdParam) {
-          setFiltroProductoId(productoIdParam);
-        }
       })
       .catch(() => {
         if (active) {
@@ -82,7 +88,26 @@ function MovimientosContent() {
     return () => {
       active = false;
     };
-  }, [router, searchParams]);
+  }, [router]);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+
+    const params = new URLSearchParams();
+
+    if (filtroTipo) params.set('tipo', filtroTipo);
+    if (filtroVendedor) params.set('vendedor', filtroVendedor);
+    if (filtroProductoId) params.set('productoId', filtroProductoId);
+    if (fechaDesde) params.set('fechaDesde', fechaDesde);
+    if (fechaHasta) params.set('fechaHasta', fechaHasta);
+
+    const nextUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState({}, '', nextUrl);
+    }
+  }, [filtersReady, filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta]);
 
   const fetchMovimientos = useCallback(async () => {
     try {
@@ -96,28 +121,43 @@ function MovimientosContent() {
       if (fechaHasta) params.set('fechaHasta', fechaHasta);
 
       const res = await fetch(`/api/movimientos?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error('No se pudo cargar el historial');
+      }
       const data = await res.json();
       setMovimientos(data.movimientos || []);
 
       if (filtroProductoId && data.movimientos?.length > 0) {
         setProductoNombre(data.movimientos[0].producto.codigo);
+      } else if (!filtroProductoId) {
+        setProductoNombre(null);
       }
     } catch (error) {
       console.error('Error fetching movimientos:', error);
+      showErrorToast('No se pudo actualizar el historial');
     } finally {
       setIsLoading(false);
     }
-  }, [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta]);
+  }, [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta, showErrorToast]);
 
   useEffect(() => {
-    if (vendedor) {
+    if (vendedor && filtersReady) {
       fetchMovimientos();
     }
-  }, [vendedor, fetchMovimientos]);
+  }, [vendedor, filtersReady, fetchMovimientos]);
 
   const handleLogout = async () => {
     await clearClientSession();
     router.replace('/');
+  };
+
+  const handleResetFilters = () => {
+    setFiltroTipo('');
+    setFiltroVendedor('');
+    setFiltroProductoId(null);
+    setProductoNombre(null);
+    setFechaDesde('');
+    setFechaHasta('');
   };
 
   const handleDeleteConfirm = async () => {
@@ -129,13 +169,14 @@ function MovimientosContent() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Error al eliminar');
+        showErrorToast(data.error || 'Error al eliminar');
         return;
       }
       setDeletingMovimiento(null);
       fetchMovimientos();
+      showSuccessToast('Movimiento eliminado');
     } catch {
-      alert('Error de conexión');
+      showErrorToast('Error de conexión');
     } finally {
       setIsDeleting(false);
     }
@@ -156,6 +197,11 @@ function MovimientosContent() {
     },
   };
 
+  const filtrosActivos = useMemo(
+    () => [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta].filter(Boolean).length,
+    [filtroTipo, filtroVendedor, filtroProductoId, fechaDesde, fechaHasta]
+  );
+
   if (!vendedor) {
     return null;
   }
@@ -168,7 +214,7 @@ function MovimientosContent() {
           {/* Top row */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <Link href="/inventario">
+              <Link href="/inventario" aria-label="Volver al inventario">
                 <button className="w-10 h-10 flex items-center justify-center hover:bg-surface-200 rounded-xl transition-colors">
                   <svg className="w-6 h-6 text-surface-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -199,9 +245,9 @@ function MovimientosContent() {
                   onClick={() => {
                     setFiltroProductoId(null);
                     setProductoNombre(null);
-                    router.replace('/movimientos');
                   }}
                   className="hover:bg-transfer-200 rounded-full p-0.5 transition-colors"
+                  aria-label="Quitar filtro de producto"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -296,6 +342,7 @@ function MovimientosContent() {
             </div>
             {(fechaDesde || fechaHasta) && (
               <button
+                type="button"
                 onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
                 className="
                   px-3 py-2.5 text-sm font-medium
@@ -304,6 +351,21 @@ function MovimientosContent() {
                 "
               >
                 Limpiar
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <p className="text-surface-500">
+              {isLoading ? 'Actualizando historial...' : `${movimientos.length} movimiento${movimientos.length === 1 ? '' : 's'} visibles`}
+            </p>
+            {filtrosActivos > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="font-medium text-transfer-700 hover:text-transfer-800 transition-colors"
+              >
+                Limpiar filtros
               </button>
             )}
           </div>
@@ -325,10 +387,21 @@ function MovimientosContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-surface-600 font-medium">No hay movimientos</p>
-            <p className="text-sm text-surface-400 mt-1">
-              Registra una entrada, traslado o salida
+            <p className="text-surface-600 font-medium">
+              {filtrosActivos > 0 ? 'No hay movimientos con esos filtros' : 'No hay movimientos'}
             </p>
+            <p className="text-sm text-surface-400 mt-1">
+              {filtrosActivos > 0 ? 'Probá limpiar filtros o ajustar el rango de fechas' : 'Registra una entrada, traslado o salida'}
+            </p>
+            {filtrosActivos > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-surface-700 border border-surface-200 hover:border-surface-300 transition-colors"
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
         ) : (
           movimientos.map((mov, index) => (
@@ -378,6 +451,7 @@ function MovimientosContent() {
       {/* FAB - New movement */}
       <Link
         href="/movimientos/nuevo"
+        aria-label="Registrar nuevo movimiento"
         className="
           fixed bottom-6 right-4 w-14 h-14
           bg-surface-900 text-white
@@ -400,6 +474,7 @@ function MovimientosContent() {
           onSaved={() => {
             setEditingMovimiento(null);
             fetchMovimientos();
+            showSuccessToast('Movimiento actualizado');
           }}
         />
       )}

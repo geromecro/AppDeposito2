@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
 import { SearchBar } from '@/components/SearchBar';
+import { useToast } from '@/components/Toast';
 import { StockCard } from '@/components/StockCard';
 import { EditMovimientoModal } from '@/components/EditMovimientoModal';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
@@ -50,6 +51,7 @@ interface Movimiento {
 
 export default function InventarioPage() {
   const router = useRouter();
+  const { error: showErrorToast, success: showSuccessToast } = useToast();
   const [stock, setStock] = useState<StockItem[]>([]);
   const [totales, setTotales] = useState<Totales | null>(null);
   const [search, setSearch] = useState('');
@@ -57,6 +59,7 @@ export default function InventarioPage() {
   const [filtroUbicacion, setFiltroUbicacion] = useState('');
   const [sinStock, setSinStock] = useState(false);
   const [ordenamiento, setOrdenamiento] = useState<'default' | 'mayor' | 'menor'>('default');
+  const [filtersReady, setFiltersReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
@@ -80,6 +83,22 @@ export default function InventarioPage() {
   const [editingMovimiento, setEditingMovimiento] = useState<(Movimiento & { producto: { id: number; codigo: string; descripcion: string; fotoUrl: string | null } }) | null>(null);
   const [deletingMovimiento, setDeletingMovimiento] = useState<Movimiento | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nextSearch = params.get('search') || '';
+    const nextUbicacion = params.get('ubicacion') || '';
+    const nextSinStock = params.get('sinStock') === 'true';
+    const nextOrden = params.get('orden');
+    const ubicacionValida = UBICACIONES.find((ubicacion) => ubicacion === nextUbicacion) || '';
+
+    setSearch(nextSearch);
+    setDebouncedSearch(nextSearch);
+    setFiltroUbicacion(ubicacionValida);
+    setSinStock(nextSinStock);
+    setOrdenamiento(nextOrden === 'mayor' || nextOrden === 'menor' ? nextOrden : 'default');
+    setFiltersReady(true);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -113,6 +132,25 @@ export default function InventarioPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!filtersReady) return;
+
+    const params = new URLSearchParams();
+    const trimmedSearch = search.trim();
+
+    if (trimmedSearch) params.set('search', trimmedSearch);
+    if (filtroUbicacion) params.set('ubicacion', filtroUbicacion);
+    if (sinStock) params.set('sinStock', 'true');
+    if (ordenamiento !== 'default') params.set('orden', ordenamiento);
+
+    const nextUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState({}, '', nextUrl);
+    }
+  }, [filtersReady, search, filtroUbicacion, sinStock, ordenamiento]);
+
   const fetchStock = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -122,25 +160,37 @@ export default function InventarioPage() {
       if (sinStock) params.set('sinStock', 'true');
 
       const res = await fetch(`/api/stock?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error('No se pudo cargar el inventario');
+      }
       const data = await res.json();
       setStock(data.stock || []);
       setTotales(data.totales || null);
     } catch (error) {
       console.error('Error fetching stock:', error);
+      showErrorToast('No se pudo actualizar el inventario');
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, filtroUbicacion, sinStock]);
+  }, [debouncedSearch, filtroUbicacion, sinStock, showErrorToast]);
 
   useEffect(() => {
-    if (vendedor) {
+    if (vendedor && filtersReady) {
       fetchStock();
     }
-  }, [vendedor, fetchStock]);
+  }, [vendedor, filtersReady, fetchStock]);
 
   const handleLogout = async () => {
     await clearClientSession();
     router.replace('/');
+  };
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setFiltroUbicacion('');
+    setSinStock(false);
+    setOrdenamiento('default');
   };
 
   const handleViewProduct = (item: StockItem) => {
@@ -182,6 +232,7 @@ export default function InventarioPage() {
       // Invalidate caches and refresh
       setCachedMovimientos({});
       fetchStock();
+      showSuccessToast('Producto actualizado');
     } catch {
       setProductEditError('Error de conexión');
     } finally {
@@ -198,13 +249,14 @@ export default function InventarioPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Error al eliminar');
+        showErrorToast(data.error || 'Error al eliminar');
         return;
       }
       setDeletingMovimiento(null);
       // Refresh data
       setCachedMovimientos({});
       fetchStock();
+      showSuccessToast('Movimiento eliminado');
       if (viewingProduct) {
         setLoadingMovimientos(true);
         fetch(`/api/movimientos?productoId=${viewingProduct.producto.id}&limit=5`)
@@ -218,7 +270,7 @@ export default function InventarioPage() {
           .finally(() => setLoadingMovimientos(false));
       }
     } catch {
-      alert('Error de conexión');
+      showErrorToast('Error de conexión');
     } finally {
       setIsDeleting(false);
     }
@@ -235,7 +287,7 @@ export default function InventarioPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Error al eliminar producto');
+        showErrorToast(data.error || 'Error al eliminar producto');
         return;
       }
 
@@ -244,8 +296,9 @@ export default function InventarioPage() {
       setCachedMovimientos({});
       setProductMovimientos([]);
       fetchStock();
+      showSuccessToast('Producto eliminado');
     } catch {
-      alert('Error de conexión');
+      showErrorToast('Error de conexión');
     } finally {
       setIsDeletingProduct(false);
     }
@@ -255,6 +308,7 @@ export default function InventarioPage() {
     setEditingMovimiento(null);
     setCachedMovimientos({});
     fetchStock();
+    showSuccessToast('Movimiento actualizado');
     if (viewingProduct) {
       setLoadingMovimientos(true);
       fetch(`/api/movimientos?productoId=${viewingProduct.producto.id}&limit=5`)
@@ -304,6 +358,14 @@ export default function InventarioPage() {
     return stock;
   }, [stock, ordenamiento]);
 
+  const filtrosActivos = useMemo(
+    () =>
+      [search.trim(), filtroUbicacion, sinStock ? 'sinStock' : '', ordenamiento !== 'default' ? ordenamiento : '']
+        .filter(Boolean)
+        .length,
+    [search, filtroUbicacion, sinStock, ordenamiento]
+  );
+
   if (!vendedor) {
     return null;
   }
@@ -321,20 +383,20 @@ export default function InventarioPage() {
             </div>
             <div className="flex items-center gap-1">
               <Link href="/movimientos" title="Historial">
-                <Button variant="ghost" size="sm" className="w-10 h-10 p-0">
+                <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir historial">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </Button>
               </Link>
               <Link href="/resumen" title="Resumen">
-                <Button variant="ghost" size="sm" className="w-10 h-10 p-0">
+                <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir resumen">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </Button>
               </Link>
-              <Button variant="ghost" size="sm" className="w-10 h-10 p-0" onClick={handleLogout} title="Salir">
+              <Button variant="ghost" size="sm" className="w-10 h-10 p-0" onClick={handleLogout} title="Salir" aria-label="Cerrar sesión">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
@@ -363,6 +425,7 @@ export default function InventarioPage() {
           <SearchBar
             value={search}
             onChange={setSearch}
+            label="Buscar inventario"
             placeholder="Buscar por código o descripción..."
           />
 
@@ -441,6 +504,21 @@ export default function InventarioPage() {
               Menor
             </button>
           </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <p className="text-surface-500">
+              {isLoading ? 'Actualizando inventario...' : `${stockOrdenado.length} producto${stockOrdenado.length === 1 ? '' : 's'} visibles`}
+            </p>
+            {filtrosActivos > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="font-medium text-transfer-700 hover:text-transfer-800 transition-colors"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -459,10 +537,21 @@ export default function InventarioPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
-            <p className="text-surface-600 font-medium">No hay productos</p>
-            <p className="text-sm text-surface-400 mt-1">
-              Registra una entrada para comenzar
+            <p className="text-surface-600 font-medium">
+              {filtrosActivos > 0 ? 'No hay resultados con esos filtros' : 'No hay productos'}
             </p>
+            <p className="text-sm text-surface-400 mt-1">
+              {filtrosActivos > 0 ? 'Probá limpiar filtros o cambiar la búsqueda' : 'Registra una entrada para comenzar'}
+            </p>
+            {filtrosActivos > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-surface-700 border border-surface-200 hover:border-surface-300 transition-colors"
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
         ) : (
           stockOrdenado.map((item, index) => (
@@ -506,6 +595,7 @@ export default function InventarioPage() {
       {/* FAB - New movement */}
       <Link
         href="/movimientos/nuevo"
+        aria-label="Registrar nuevo movimiento"
         className="
           fixed bottom-6 right-4 w-14 h-14
           bg-surface-900 text-white
@@ -543,6 +633,7 @@ export default function InventarioPage() {
             {viewingProduct.producto.fotoUrl ? (
               <button
                 onClick={() => setImageFullscreen(viewingProduct.producto.fotoUrl)}
+                aria-label="Ver imagen completa del producto"
                 className="w-full cursor-zoom-in relative group"
               >
                 <img
@@ -694,6 +785,7 @@ export default function InventarioPage() {
                           })}
                           className="p-1.5 text-transfer-600 bg-transfer-50 rounded-md active:bg-transfer-100 transition-colors"
                           title="Editar"
+                          aria-label={`Editar movimiento ${mov.id}`}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -703,6 +795,7 @@ export default function InventarioPage() {
                           onClick={() => setDeletingMovimiento(mov)}
                           className="p-1.5 text-error-600 bg-error-50 rounded-md active:bg-error-100 transition-colors"
                           title="Eliminar"
+                          aria-label={`Eliminar movimiento ${mov.id}`}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

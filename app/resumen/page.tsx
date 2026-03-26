@@ -108,7 +108,7 @@ export default function ResumenPage() {
       <header className="sticky top-0 glass border-b border-surface-200 z-10">
         <div className="px-4 py-4">
           <div className="flex items-center gap-3 mb-4">
-            <Link href="/inventario">
+            <Link href="/inventario" aria-label="Volver al inventario">
               <button className="w-10 h-10 flex items-center justify-center hover:bg-surface-200 rounded-xl transition-colors">
                 <svg className="w-6 h-6 text-surface-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
