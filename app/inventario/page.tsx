@@ -42,23 +42,10 @@ interface Movimiento {
   };
 }
 
-interface IndicadoresSistema {
-  movimientosDia: number;
-  salidasDia: number;
-  productosActivos30d: number;
-  ultimoMovimiento: {
-    createdAt: string;
-    tipo: 'ENTRADA' | 'TRASLADO' | 'SALIDA';
-    vendedor: string;
-    productoCodigo: string;
-  } | null;
-}
-
 export default function InventarioPage() {
   const router = useRouter();
   const { error: showErrorToast, success: showSuccessToast } = useToast();
   const [stock, setStock] = useState<StockItem[]>([]);
-  const [indicadores, setIndicadores] = useState<IndicadoresSistema | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtroUbicacion, setFiltroUbicacion] = useState('');
@@ -66,7 +53,6 @@ export default function InventarioPage() {
   const [ordenamiento, setOrdenamiento] = useState<'default' | 'mayor' | 'menor'>('default');
   const [filtersReady, setFiltersReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingIndicadores, setIsLoadingIndicadores] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
 
   // Estados para modal de detalle e imagen fullscreen
@@ -179,46 +165,11 @@ export default function InventarioPage() {
     }
   }, [debouncedSearch, filtroUbicacion, sinStock, showErrorToast]);
 
-  const fetchIndicadores = useCallback(async () => {
-    try {
-      setIsLoadingIndicadores(true);
-
-      const res = await fetch('/api/stats');
-      if (!res.ok) {
-        throw new Error('No se pudieron cargar los indicadores');
-      }
-
-      const data = await res.json();
-      setIndicadores({
-        movimientosDia: data.movimientosDia || 0,
-        salidasDia: data.salidasDia || 0,
-        productosActivos30d: data.productosActivos30d || 0,
-        ultimoMovimiento: data.ultimoMovimiento || null,
-      });
-    } catch (error) {
-      console.error('Error fetching indicadores:', error);
-      showErrorToast('No se pudieron cargar los indicadores del sistema');
-    } finally {
-      setIsLoadingIndicadores(false);
-    }
-  }, [showErrorToast]);
-
-  const refreshInventario = useCallback(() => {
-    void fetchStock();
-    void fetchIndicadores();
-  }, [fetchIndicadores, fetchStock]);
-
   useEffect(() => {
     if (vendedor && filtersReady) {
       fetchStock();
     }
   }, [vendedor, filtersReady, fetchStock]);
-
-  useEffect(() => {
-    if (vendedor) {
-      fetchIndicadores();
-    }
-  }, [vendedor, fetchIndicadores]);
 
   const handleLogout = async () => {
     await clearClientSession();
@@ -271,7 +222,7 @@ export default function InventarioPage() {
       setIsEditingProduct(false);
       // Invalidate caches and refresh
       setCachedMovimientos({});
-      refreshInventario();
+      fetchStock();
       showSuccessToast('Producto actualizado');
     } catch {
       setProductEditError('Error de conexión');
@@ -295,7 +246,7 @@ export default function InventarioPage() {
       setDeletingMovimiento(null);
       // Refresh data
       setCachedMovimientos({});
-      refreshInventario();
+      fetchStock();
       showSuccessToast('Movimiento eliminado');
       if (viewingProduct) {
         setLoadingMovimientos(true);
@@ -335,7 +286,7 @@ export default function InventarioPage() {
       setViewingProduct(null);
       setCachedMovimientos({});
       setProductMovimientos([]);
-      refreshInventario();
+      fetchStock();
       showSuccessToast('Producto eliminado');
     } catch {
       showErrorToast('Error de conexión');
@@ -347,7 +298,7 @@ export default function InventarioPage() {
   const handleMovimientoSaved = () => {
     setEditingMovimiento(null);
     setCachedMovimientos({});
-    refreshInventario();
+    fetchStock();
     showSuccessToast('Movimiento actualizado');
     if (viewingProduct) {
       setLoadingMovimientos(true);
@@ -406,29 +357,6 @@ export default function InventarioPage() {
     [search, filtroUbicacion, sinStock, ordenamiento]
   );
 
-  const ultimoMovimientoLabel = useMemo(() => {
-    if (!indicadores?.ultimoMovimiento) {
-      return 'Sin movimientos registrados';
-    }
-
-    return new Intl.DateTimeFormat('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(indicadores.ultimoMovimiento.createdAt));
-  }, [indicadores]);
-
-  const ultimoMovimientoDetalle = useMemo(() => {
-    if (!indicadores?.ultimoMovimiento) {
-      return 'Todavia no hay actividad registrada en este sistema.';
-    }
-
-    return `${indicadores.ultimoMovimiento.productoCodigo} · ${TIPO_MOVIMIENTO_LABELS[indicadores.ultimoMovimiento.tipo]} · ${indicadores.ultimoMovimiento.vendedor}`;
-  }, [indicadores]);
-
-  const isRefreshingScreen = isLoading || isLoadingIndicadores;
-
   if (!vendedor) {
     return null;
   }
@@ -452,8 +380,8 @@ export default function InventarioPage() {
                   </svg>
                 </Button>
               </Link>
-              <Link href="/resumen" title="Resumen">
-                <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir resumen">
+              <Link href="/resumen" title="Actividad del sistema">
+                <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir actividad del sistema">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
@@ -463,12 +391,12 @@ export default function InventarioPage() {
                 variant="ghost"
                 size="sm"
                 className="w-10 h-10 p-0"
-                onClick={refreshInventario}
+                onClick={fetchStock}
                 title="Actualizar"
                 aria-label="Actualizar"
-                disabled={isRefreshingScreen}
+                disabled={isLoading}
               >
-                <svg className={`w-5 h-5 ${isRefreshingScreen ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </Button>
@@ -579,59 +507,6 @@ export default function InventarioPage() {
           </div>
         </div>
       </header>
-
-      <section className="px-4 pt-4">
-        <div className="rounded-3xl border border-surface-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-surface-900">Actividad del sistema</h2>
-              <p className="mt-1 text-sm text-surface-500">
-                Indicadores del deposito registrado. No representan el stock fisico total.
-              </p>
-            </div>
-            <Link
-              href="/resumen"
-              className="text-sm font-medium text-transfer-700 transition-colors hover:text-transfer-800"
-            >
-              Ver detalle
-            </Link>
-          </div>
-
-          {isLoadingIndicadores ? (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {[...Array(4)].map((_, index) => (
-                <div key={index} className="h-24 rounded-2xl bg-surface-100 skeleton" />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-surface-200 bg-surface-50 p-4">
-                <p className="text-sm text-surface-500">Movimientos registrados hoy</p>
-                <p className="mt-2 text-3xl font-bold text-surface-900">{indicadores?.movimientosDia || 0}</p>
-                <p className="mt-1 text-xs text-surface-500">Carga operativa del dia dentro del sistema.</p>
-              </div>
-
-              <div className="rounded-2xl border border-warning-200 bg-warning-50 p-4">
-                <p className="text-sm text-warning-800">Salidas registradas hoy</p>
-                <p className="mt-2 text-3xl font-bold text-warning-900">{indicadores?.salidasDia || 0}</p>
-                <p className="mt-1 text-xs text-warning-700">Mide consumo registrado y necesidad de seguimiento.</p>
-              </div>
-
-              <div className="rounded-2xl border border-accent-200 bg-accent-50 p-4">
-                <p className="text-sm text-accent-800">Productos activos en 30 dias</p>
-                <p className="mt-2 text-3xl font-bold text-accent-900">{indicadores?.productosActivos30d || 0}</p>
-                <p className="mt-1 text-xs text-accent-700">Catalogo con uso real reciente en este sistema.</p>
-              </div>
-
-              <div className="rounded-2xl border border-transfer-200 bg-transfer-50 p-4">
-                <p className="text-sm text-transfer-800">Ultimo movimiento registrado</p>
-                <p className="mt-2 text-lg font-bold leading-tight text-transfer-900">{ultimoMovimientoLabel}</p>
-                <p className="mt-1 text-xs text-transfer-700">{ultimoMovimientoDetalle}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* Stock list */}
       <div className="p-4 pb-40 space-y-3">

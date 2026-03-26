@@ -9,9 +9,15 @@ import { clearClientSession, fetchClientSession } from '@/lib/client-session';
 import { formatDateForInput } from '@/lib/date-utils';
 
 interface Stats {
-  totalProductos: number;
-  totalUnidades: number;
   movimientosDia: number;
+  salidasDia: number;
+  productosActivos30d: number;
+  ultimoMovimiento: {
+    createdAt: string;
+    tipo: 'ENTRADA' | 'TRASLADO' | 'SALIDA';
+    vendedor: string;
+    productoCodigo: string;
+  } | null;
   porVendedor: {
     vendedor: string;
     registros: number;
@@ -32,6 +38,19 @@ export default function ResumenPage() {
   });
   const [fechaHasta, setFechaHasta] = useState(formatDateForInput(new Date()));
   const [isExporting, setIsExporting] = useState(false);
+
+  const ultimoMovimientoLabel = stats?.ultimoMovimiento
+    ? new Intl.DateTimeFormat('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(stats.ultimoMovimiento.createdAt))
+    : 'Sin movimientos registrados';
+
+  const ultimoMovimientoDetalle = stats?.ultimoMovimiento
+    ? `${stats.ultimoMovimiento.productoCodigo} · ${stats.ultimoMovimiento.tipo} · ${stats.ultimoMovimiento.vendedor}`
+    : 'Todavia no hay actividad registrada en este sistema.';
 
   useEffect(() => {
     let active = true;
@@ -115,7 +134,7 @@ export default function ResumenPage() {
                 </svg>
               </button>
             </Link>
-            <h1 className="text-xl font-bold text-surface-900">Resumen</h1>
+            <h1 className="text-xl font-bold text-surface-900">Actividad del sistema</h1>
           </div>
 
           <input
@@ -135,20 +154,38 @@ export default function ResumenPage() {
       </header>
 
       <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white border border-surface-200 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-3xl font-bold text-surface-900">{stats?.totalProductos || 0}</p>
-            <p className="text-sm text-surface-500 mt-1">Registros totales</p>
+        <div className="rounded-3xl border border-surface-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-surface-900">Actividad registrada</h2>
+            <p className="mt-1 text-sm text-surface-500">
+              Estos indicadores reflejan solo el deposito cargado en el sistema, no el stock fisico total.
+            </p>
           </div>
 
-          <div className="bg-white border border-surface-200 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-3xl font-bold text-surface-900">{stats?.totalUnidades || 0}</p>
-            <p className="text-sm text-surface-500 mt-1">Unidades totales</p>
-          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-surface-200 bg-surface-50 p-4">
+              <p className="text-sm text-surface-500">Movimientos en la fecha</p>
+              <p className="mt-2 text-3xl font-bold text-surface-900">{stats?.movimientosDia || 0}</p>
+              <p className="mt-1 text-xs text-surface-500">Actividad operativa registrada para el dia elegido.</p>
+            </div>
 
-          <div className="col-span-2 bg-gradient-to-br from-accent-500 to-accent-600 rounded-2xl p-5 text-center shadow-lg shadow-accent-500/20">
-            <p className="text-4xl font-bold text-white">{stats?.movimientosDia || 0}</p>
-            <p className="text-sm text-accent-100 mt-1">Registros del día</p>
+            <div className="rounded-2xl border border-warning-200 bg-warning-50 p-4">
+              <p className="text-sm text-warning-800">Salidas en la fecha</p>
+              <p className="mt-2 text-3xl font-bold text-warning-900">{stats?.salidasDia || 0}</p>
+              <p className="mt-1 text-xs text-warning-700">Sirve para seguir consumo registrado y reposicion.</p>
+            </div>
+
+            <div className="rounded-2xl border border-accent-200 bg-accent-50 p-4">
+              <p className="text-sm text-accent-800">Productos activos en 30 dias</p>
+              <p className="mt-2 text-3xl font-bold text-accent-900">{stats?.productosActivos30d || 0}</p>
+              <p className="mt-1 text-xs text-accent-700">Catalogo con uso real reciente dentro del sistema.</p>
+            </div>
+
+            <div className="rounded-2xl border border-transfer-200 bg-transfer-50 p-4">
+              <p className="text-sm text-transfer-800">Ultimo movimiento registrado</p>
+              <p className="mt-2 text-lg font-bold leading-tight text-transfer-900">{ultimoMovimientoLabel}</p>
+              <p className="mt-1 text-xs text-transfer-700">{ultimoMovimientoDetalle}</p>
+            </div>
           </div>
         </div>
 
