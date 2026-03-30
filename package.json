@@ -7,6 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "import:deposito": "node scripts/import-deposito-stock.js",
     "postinstall": "prisma generate",
     "prisma:migrate": "prisma db push",
     "prisma:studio": "prisma studio"
@@ -27,7 +28,8 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tailwindcss": "^4.1.17",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "eslint": "^9.39.1",
