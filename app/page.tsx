@@ -8,6 +8,9 @@ import { fetchClientSession } from '@/lib/client-session';
 export default function LoginPage() {
   const router = useRouter();
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -36,18 +39,36 @@ export default function LoginPage() {
   }, [router]);
 
   const handleSubmit = async () => {
-    if (selectedVendedor) {
+    if (!selectedVendedor || !password) return;
+    setIsSubmitting(true);
+    setLoginError('');
+
+    try {
       const res = await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendedor: selectedVendedor }),
+        body: JSON.stringify({ vendedor: selectedVendedor, password }),
       });
 
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After');
+        setLoginError(
+          retryAfter
+            ? `Demasiados intentos. Intenta en ${Math.ceil(Number(retryAfter) / 60)} minutos.`
+            : 'Demasiados intentos. Intenta mas tarde.'
+        );
+        return;
+      }
+
       if (!res.ok) {
+        setLoginError('Contraseña incorrecta');
+        setPassword('');
         return;
       }
 
       router.replace('/inventario');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -63,7 +84,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex flex-col bg-surface-950 relative overflow-hidden">
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C%2Fsvg%3E")`,
       }} />
 
       {/* Content */}
@@ -93,7 +114,10 @@ export default function LoginPage() {
             {VENDEDORES.map((vendedor, index) => (
               <button
                 key={vendedor}
-                onClick={() => setSelectedVendedor(vendedor)}
+                onClick={() => {
+                  setSelectedVendedor(vendedor);
+                  setLoginError('');
+                }}
                 className={`
                   relative p-4 rounded-xl text-left transition-all duration-200
                   ${selectedVendedor === vendedor
@@ -126,6 +150,29 @@ export default function LoginPage() {
               </button>
             ))}
           </div>
+
+          {selectedVendedor && (
+            <div className="mt-6">
+              <label className="block text-surface-400 text-sm mb-2 text-center">
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                placeholder="Ingresa la contraseña"
+                autoFocus
+                className="w-full px-4 py-3 rounded-xl bg-surface-800/50 border border-surface-700/50
+                           text-white placeholder-surface-500 focus:outline-none focus:border-accent-500
+                           focus:ring-1 focus:ring-accent-500 transition-colors"
+              />
+            </div>
+          )}
+
+          {loginError && (
+            <p className="mt-3 text-center text-sm text-red-400">{loginError}</p>
+          )}
         </div>
       </div>
 
@@ -133,16 +180,23 @@ export default function LoginPage() {
       <div className="p-6 relative z-10">
         <button
           onClick={handleSubmit}
-          disabled={!selectedVendedor}
+          disabled={!selectedVendedor || !password || isSubmitting}
           className={`
             w-full py-4 rounded-xl font-semibold text-lg transition-all duration-200 press-effect
-            ${selectedVendedor
+            ${selectedVendedor && password && !isSubmitting
               ? 'bg-white text-surface-900 shadow-lg hover:shadow-xl'
               : 'bg-surface-800 text-surface-500 cursor-not-allowed'
             }
           `}
         >
-          {selectedVendedor ? `Continuar como ${selectedVendedor}` : 'Selecciona tu usuario'}
+          {isSubmitting
+            ? 'Verificando...'
+            : !selectedVendedor
+              ? 'Selecciona tu usuario'
+              : !password
+                ? 'Ingresa la contraseña'
+                : `Continuar como ${selectedVendedor}`
+          }
         </button>
       </div>
     </main>
