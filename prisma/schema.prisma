@@ -147,3 +147,4 @@ model AccesoLogin {
   @@index([createdAt])
   @@index([usuario])
   @@index([resultado])
+}
