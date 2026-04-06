@@ -387,6 +387,14 @@ export default function InventarioPage() {
                   </svg>
                 </Button>
               </Link>
+              <Link href="/auditoria" title="Auditoria de accesos">
+                <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir auditoria de accesos">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3l7 4v5c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V7l7-4z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.5 12.5l1.5 1.5 3.5-4" />
+                  </svg>
+                </Button>
+              </Link>
               <Link href="/relevamiento" title="Abrir relevamiento">
                 <Button variant="ghost" size="sm" className="w-10 h-10 p-0" aria-label="Abrir relevamiento">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

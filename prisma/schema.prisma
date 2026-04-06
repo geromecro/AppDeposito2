@@ -81,6 +81,11 @@ enum AccionHistorial {
   ELIMINAR
 }
 
+enum ResultadoAccesoLogin {
+  EXITOSO
+  FALLIDO
+}
+
 enum ClasificacionRelevamiento {
   CON_POTENCIAL
   SIN_SALIDA_HISTORICA
@@ -129,3 +134,16 @@ model ProductoRelevado {
   @@index([estado])
   @@index([relevadoAt])
 }
+
+model AccesoLogin {
+  id             Int                  @id @default(autoincrement())
+  usuario        String
+  ip             String?
+  userAgent      String?
+  resultado      ResultadoAccesoLogin
+  ubicacionAprox String?
+  createdAt      DateTime             @default(now())
+
+  @@index([createdAt])
+  @@index([usuario])
+  @@index([resultado])
