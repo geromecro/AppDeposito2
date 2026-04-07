@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/Button';
@@ -54,6 +54,7 @@ export default function InventarioPage() {
   const [filtersReady, setFiltersReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [vendedor, setVendedor] = useState<string | null>(null);
+  const stockRequestControllerRef = useRef<AbortController | null>(null);
 
   // Estados para modal de detalle e imagen fullscreen
   const [viewingProduct, setViewingProduct] = useState<StockItem | null>(null);
@@ -119,10 +120,16 @@ export default function InventarioPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearch(search.trim());
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    return () => {
+      stockRequestControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!filtersReady) return;
@@ -144,6 +151,10 @@ export default function InventarioPage() {
   }, [filtersReady, search, filtroUbicacion, sinStock, ordenamiento]);
 
   const fetchStock = useCallback(async () => {
+    stockRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    stockRequestControllerRef.current = controller;
+
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
@@ -151,17 +162,26 @@ export default function InventarioPage() {
       if (filtroUbicacion) params.set('ubicacion', filtroUbicacion);
       if (sinStock) params.set('sinStock', 'true');
 
-      const res = await fetch(`/api/stock?${params.toString()}`);
+      const res = await fetch(`/api/stock?${params.toString()}`, {
+        signal: controller.signal,
+      });
       if (!res.ok) {
         throw new Error('No se pudo cargar el inventario');
       }
       const data = await res.json();
       setStock(data.stock || []);
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
       console.error('Error fetching stock:', error);
       showErrorToast('No se pudo actualizar el inventario');
     } finally {
-      setIsLoading(false);
+      if (stockRequestControllerRef.current === controller) {
+        stockRequestControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   }, [debouncedSearch, filtroUbicacion, sinStock, showErrorToast]);
 
