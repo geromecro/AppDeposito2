@@ -47,9 +47,7 @@ function fromBase64Url(input: string) {
 }
 
 function sign(payload: string) {
-  return toBase64Url(
-    crypto.createHmac('sha256', getSessionSecret()).update(payload).digest()
-  );
+  return toBase64Url(crypto.createHmac('sha256', getSessionSecret()).update(payload).digest());
 }
 
 function buildToken(session: SessionPayload) {
@@ -134,29 +132,5 @@ export function clearSessionCookie(response: NextResponse) {
     secure: process.env.NODE_ENV === 'production',
     expires: new Date(0),
     path: '/',
-  });
-}
-
-export async function verifyAppPassword(password: string): Promise<boolean> {
-  const stored = process.env.APP_PASSWORD_HASH;
-  if (!stored) {
-    if (process.env.NODE_ENV !== 'production') return true; // dev: sin contraseña configurada
-    return false; // prod sin hash → fail-closed
-  }
-
-  const colonIndex = stored.indexOf(':');
-  if (colonIndex === -1) return false;
-
-  const salt = stored.slice(0, colonIndex);
-  const expectedHash = stored.slice(colonIndex + 1);
-
-  return new Promise((resolve) => {
-    crypto.pbkdf2(password, salt, 100_000, 64, 'sha512', (err, derivedKey) => {
-      if (err) { resolve(false); return; }
-      const a = Buffer.from(derivedKey.toString('hex'));
-      const b = Buffer.from(expectedHash);
-      if (a.length !== b.length) { resolve(false); return; }
-      resolve(crypto.timingSafeEqual(a, b));
-    });
   });
 }
